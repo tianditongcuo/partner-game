@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# MaiBot 插件运行时产物（官方建议：运行时配置与数据不进仓库）
+/config.toml
+/data/
+docs/_t_*.html
+docs/_p_*.png
+__pycache__/
+*.pyc
