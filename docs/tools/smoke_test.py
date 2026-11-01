@@ -135,6 +135,41 @@ def main():
         except Exception as e:
             print("[FAIL] 子模块调用失败: %s: %s" % (type(e).__name__, e))
             ok = False
+
+        # ---- 数值平衡覆盖：改配置生效、清空恢复默认 ----
+        try:
+            from types import SimpleNamespace
+
+            class _Log(object):
+                def info(self, *a, **k):
+                    pass
+
+                def warning(self, *a, **k):
+                    pass
+
+            p = mod.create_plugin()
+            p.ctx = SimpleNamespace(logger=_Log())
+
+            p.config = SimpleNamespace(balance=SimpleNamespace(
+                work_limit=7, cycle_hours=12, rob_cap=0.75, cultivate_cost_base=80))
+            p._apply_balance_overrides()
+            assert pkg.balance.WORK_LIMIT == 7, pkg.balance.WORK_LIMIT
+            assert pkg.balance.CYCLE_HOURS == 12
+            assert abs(pkg.combat.resolve(pkg.combat.KIND_ROB_MONEY, 99, 0, 0, 0.35).final_prob - 0.75) < 1e-9
+            assert pkg.realms.cultivate_cost(4) == 160, pkg.realms.cultivate_cost(4)
+            print("[ OK ] 覆盖生效: WORK_LIMIT=7, CYCLE_HOURS=12, ROB_CAP=0.75, 修炼费用随系数变化")
+
+            p.config = SimpleNamespace(balance=SimpleNamespace(
+                work_limit=None, cycle_hours=None, rob_cap=None, cultivate_cost_base=None))
+            p._apply_balance_overrides()
+            assert pkg.balance.WORK_LIMIT == 3, pkg.balance.WORK_LIMIT
+            assert pkg.balance.CYCLE_HOURS == 24
+            assert abs(pkg.balance.ROB_CAP - 0.9) < 1e-9
+            assert pkg.realms.cultivate_cost(4) == 100
+            print("[ OK ] 清空后恢复默认: WORK_LIMIT=3, CYCLE_HOURS=24, ROB_CAP=0.9")
+        except Exception as e:
+            print("[FAIL] 数值平衡覆盖异常: %s: %s" % (type(e).__name__, e))
+            ok = False
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

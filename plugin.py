@@ -23,6 +23,15 @@ from .realms import (
 )
 from .utils import PersistStore, fetch_avatar_base64, format_user_display
 
+#: balance 模块的出厂默认值快照。
+#: WebUI 的「数值平衡」留空时，用它把被覆盖过的值还原回去 ——
+#: 没有这份快照，改过一次就再也找不到原值了。
+_BALANCE_DEFAULTS = {
+    name: getattr(B, name)
+    for name in dir(B)
+    if name.isupper() and isinstance(getattr(B, name), (int, float))
+}
+
 
 def parse_forced_rules(rules):
     """把 forced_wives 配置解析成 `{发起人QQ: 目标QQ}`。
@@ -49,6 +58,10 @@ class PartnerGamePlugin(MaiBotPlugin):
         self._last_action: dict = {}
         self.pending_proposals: dict = {}
         self._bot_qq_cache: Optional[str] = None
+        try:
+            self._apply_balance_overrides()   # WebUI 里改过的数值优先于 balance.py
+        except Exception as e:
+            self.ctx.logger.warning("应用数值平衡覆盖失败（将使用默认值）: %s" % e)
         self.ctx.logger.info("✅ partner_game 已加载")
 
     async def on_unload(self) -> None:
@@ -66,6 +79,28 @@ class PartnerGamePlugin(MaiBotPlugin):
             self.ctx.logger.info(f"partner_game 配置已更新: {version}")
             # 配置 bot_qq 改了，清缓存让下次重新解析
             self._bot_qq_cache = None
+            self._apply_balance_overrides()
+
+    def _apply_balance_overrides(self) -> None:
+        """把 WebUI「数值平衡」里的非空项写回 balance 模块。
+
+        为什么不逐个改成 self.config 调用：数值散落在 47 处 B.XXX，
+        改调用点既容易漏、又要改 47 次。把模块属性改掉，所有调用点自动生效。
+        """
+        section = getattr(self.config, "balance", None)
+        if section is None:          # 老配置没有这一段
+            return
+
+        changed = []
+        for name, default in _BALANCE_DEFAULTS.items():
+            value = getattr(section, name.lower(), None)
+            target = default if value is None else value
+            if getattr(B, name) != target:
+                setattr(B, name, target)
+                changed.append("%s=%s" % (name, target))
+
+        if changed:
+            self.ctx.logger.info("数值平衡覆盖已生效: " + ", ".join(changed))
 
     # 上下文解析
     def _extract_ctx(self, kwargs: dict):

@@ -92,14 +92,18 @@ def power(level: int) -> int:
 
 
 try:                                    # 兼容"作为包导入"与"作为顶层模块导入"
-    from .balance import CULTIVATE_COST_BASE
+    from . import balance as _B
 except ImportError:                     # docs/tools 里是 `import realms`（顶层）
-    from balance import CULTIVATE_COST_BASE
+    import balance as _B
 
 
 def cultivate_cost(level: int) -> int:
-    """在 level 处突破一次的丹药费用（系数来自 balance.py）。"""
-    return (realm_index(level) + 1) * CULTIVATE_COST_BASE
+    """在 level 处突破一次的丹药费用。
+
+    系数每次调用时才读 `balance.CULTIVATE_COST_BASE`，
+    这样 WebUI 改了数值平衡配置后立刻生效（导入时固化就拿不到新值）。
+    """
+    return (realm_index(level) + 1) * _B.CULTIVATE_COST_BASE
 
 
 # ---------------------------------------------------------------- 战力求胜率

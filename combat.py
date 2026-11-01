@@ -58,12 +58,20 @@ class CombatResult(NamedTuple):
         return round(self.shield_penalty * 100, 2)
 
 
-#: 各玩法的钳制区间与是否吃战力/护盾
+#: 各玩法是否吃战力/护盾。钳制区间不在这里固化 —— 每次计算时现读 balance，
+#: 否则 WebUI 改了胜率上下限也不会生效。
 _RULES = {
-    KIND_FORCE:     {"clamp": (B.FORCE_FLOOR, B.FORCE_CAP), "power": False, "shield": False},
-    KIND_ROB_WIFE:  {"clamp": (B.ROB_FLOOR, B.ROB_CAP),     "power": True,  "shield": True},
-    KIND_ROB_MONEY: {"clamp": (B.ROB_FLOOR, B.ROB_CAP),     "power": True,  "shield": False},
+    KIND_FORCE:     {"power": False, "shield": False},
+    KIND_ROB_WIFE:  {"power": True,  "shield": True},
+    KIND_ROB_MONEY: {"power": True,  "shield": False},
 }
+
+
+def _clamp_range(kind):
+    """当前生效的胜率钳制区间（动态取值）。"""
+    if kind == KIND_FORCE:
+        return B.FORCE_FLOOR, B.FORCE_CAP
+    return B.ROB_FLOOR, B.ROB_CAP
 
 
 def resolve(kind, attack_level, defend_level, affection=0, base_prob=0.0, forced=False):
@@ -95,7 +103,7 @@ def resolve(kind, attack_level, defend_level, affection=0, base_prob=0.0, forced
     bonus = delta * POWER_RATE_PER_POINT if rule["power"] else 0.0
     shield = B.affection_shield(affection) if rule["shield"] else 0.0
 
-    lo, hi = rule["clamp"]
+    lo, hi = _clamp_range(kind)
     final = base_prob + bonus - shield
     final = max(lo, min(hi, final))
 
