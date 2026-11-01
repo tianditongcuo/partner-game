@@ -96,6 +96,32 @@ def cultivate_cost(level: int) -> int:
     return (realm_index(level) + 1) * 50
 
 
+# ---------------------------------------------------------------- 战力求胜率
+# 战役系数（每 1 点战力差折算多少胜率）不能写死，否则境界扩容会破坏手感。
+#
+# 原版：36 档，满级战力 315；跨一个大境界（L31→L35）战力差 98，
+#       配 0.5%/点 ⇒ 约 49% 胜率振幅 ⇒ 约 1.2 个境界打满上限。
+# 现版：100 档，满级战力 2475；跨一个大境界（L95→L99）战力差 195。
+#
+# 若沿用 0.5%/点，后期半个境界就打满；若按“满级战力比”缩到 0.064%/点，
+# 又要 5 个境界才打满。取“满级处一个境界的胜率振幅与原版一致”：
+#     0.005 × 98 / 195 ≈ 0.0025
+# 这样中段约 2.3 个境界打满（原版 2.5），满级约 1.2 个境界打满（原版 1.2）。
+LEGACY_MAX_POWER = 315          # 原版 36 档体系的满级战力
+LEGACY_RATE_PER_POINT = 0.005   # 原版每点战力带来的胜率
+POWER_RATE_PER_POINT = 0.0025   # 现版：每点战力带来的胜率
+
+
+def power_win_bonus(delta_power: int) -> float:
+    """战力差 → 胜率加成（可正可负，调用方自行与 base 相加并钳制）。"""
+    return delta_power * POWER_RATE_PER_POINT
+
+
+def rate_percent() -> str:
+    """用于文案，例如 `0.25%`。"""
+    return ("%.2f" % (POWER_RATE_PER_POINT * 100)).rstrip("0").rstrip(".") + "%"
+
+
 def level_span() -> str:
     """用于文案：`凡境前期 ~ 飞升圆满（共 100 档）`。"""
     return "%s ~ %s（共 %d 档）" % (realm_name(0), realm_name(MAX_LEVEL), MAX_LEVEL + 1)

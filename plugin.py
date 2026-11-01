@@ -17,6 +17,8 @@ from .realms import (
     is_major_boundary,
     is_max_level,
     power,
+    power_win_bonus,
+    rate_percent,
     realm_name,
 )
 from .utils import PersistStore, fetch_avatar_base64, today_str, format_user_display
@@ -1037,8 +1039,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         if is_forced:
             prob = 0.0
         else:
-            # 底蕴加成和护盾扣减 (新公式: 0.5% per power diff, -1% per 20 affection)
-            prob = prob + (delta_p * 0.005) - (affection // 20 * 0.01)
+            # 底蕴加成和护盾扣减 (0.25%/战力差, 每 20 好感减 1%)
+            prob = prob + power_win_bonus(delta_p) - (affection // 20 * 0.01)
             # 保底机制: 永远在 10% 到 90% 之间
             prob = max(0.10, min(0.90, prob))
         
@@ -1147,7 +1149,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         delta_p = p1 - p2
         
         # Calculate modifiers
-        delta_bonus = delta_p * 0.005
+        delta_bonus = power_win_bonus(delta_p)
         affection_penalty = (affection // 20) * 0.01
         
         # Absolute numbers for display
@@ -1255,8 +1257,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         if is_forced:
             prob = 0.0
         else:
-            # 底蕴加成 (新公式: 0.5% per power diff, no affection shield)
-            prob = prob + (delta_p * 0.005)
+            # 底蕴加成 (0.25%/战力差, 无好感护盾)
+            prob = prob + power_win_bonus(delta_p)
             # 保底机制: 永远在 10% 到 90% 之间
             prob = max(0.10, min(0.90, prob))
         
@@ -1323,7 +1325,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         p2 = power(l2)
         delta_p = p1 - p2
         
-        delta_bonus = delta_p * 0.005
+        delta_bonus = power_win_bonus(delta_p)
         base_display = round(base_prob * 100, 2)
         delta_display = round(delta_bonus * 100, 2)
         
@@ -1402,7 +1404,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "22. /发钱 @某人 <金额>：为指定玩家增加或扣除金币（支持负数，限管理员）。\n"
             "---\n"
             f"🎯 当前基础强娶: {prob_force}% | 基础抢夺: {prob_rob}%\n"
-            "💡 提示：抢老婆与打劫时计算【底蕴战力=等级×(境界数+1)】，战力差每1点提供0.5%胜率加成(双向保底10%)。无论打劫、强娶还是抢夺，失败罚款的一半将作为精神损失费直接赔偿给防守方！"
+            "💡 提示：抢老婆与打劫时计算【底蕴战力=等级×(境界数+1)】，战力差每1点提供" + rate_percent() + "胜率加成(双向保底10%)。无论打劫、强娶还是抢夺，失败罚款的一半将作为精神损失费直接赔偿给防守方！"
         )
         await self._send_forward_msg(group_id, sender_qq, "伴侣系统操作指南", help_text)
         return True, "help", 2
@@ -1864,7 +1866,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"• 抢老婆：基础概率 {prob_rob}%。资金门槛 500，失败罚款 200~500 金币（50%赔给防守方原配），并有20%概率掉级。\n"
             f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。资金门槛 300，成功抢走目标 10%~25% 资产（最高1500）。失败罚款 100~300 金币（50%赔给防守方）。低保户（资产<100）不可被打劫。\n"
             "• 犯罪概率浮动公式：\n"
-            "  1. 战力压制：采用【底蕴战力=等级×(大境界数+1)】，(进攻方战力 - 防守方最高战力) × 0.5%。\n"
+            "  1. 战力压制：采用【底蕴战力=等级×(大境界数+1)】，(进攻方战力 - 防守方最高战力) × " + rate_percent() + "。\n"
             "  2. 好感抵消（仅限抢老婆）：夫妻好感度每 20 点，减免 1% 成功率。\n"
             "  3. 绝对保底：所有加成计算后，成功率强制锁定在 10% ~ 90% 之间。"
         )

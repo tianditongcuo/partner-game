@@ -102,7 +102,7 @@ DOMAIN_DETAIL = {
         ("战斗掉级", "抢老婆失败且 level>0 时 20% 概率掉 1 级", "plugin.py:1072-1074"),
     ],
     "combat": [
-        ("概率公式", "p = base + Δpower×0.005 − (affection//20)×0.01，钳制在 10%~90%", "plugin.py:1030-1033"),
+        ("概率公式", "p = base + Δpower×系数 − (affection//20)×0.01，钳制在 10%~90%", "plugin.py:1030-1033"),
         ("强娶", "base 0.40；不参与战力/好感；钳制 0~1", "plugin.py:796-802"),
         ("抢老婆", "base 0.30；防守方取夫妻双方最高战力", "plugin.py:1015-1033"),
         ("打劫", "base 0.35；无好感护盾；附加资金门槛与低保户保护", "plugin.py:1236-1251"),
@@ -175,7 +175,7 @@ def trigger_of(c):
 
 
 def simulate_cultivation(runs=20000, seed=7):
-    """模拟从 0 级修到 35 级，统计期望尝试次数与花费。"""
+    """模拟从 0 级修到满级，统计期望尝试次数与花费。"""
     random.seed(seed)
     attempts, moneys = [], []
     for _ in range(runs):
@@ -221,7 +221,7 @@ def combat_curve(kind, affection=0):
     for dp in range(-330, 331, 10):
         p = base
         if has_power:
-            p += dp * 0.005
+            p += R.power_win_bonus(dp) if R else dp * 0.005
         if has_aff:
             p -= (affection // 20) * 0.01
         lo, hi = (0.0, 1.0) if kind == "force_marry" else (0.10, 0.90)
@@ -498,10 +498,15 @@ def section_probability(m):
                        x_label="战力差 Δpower（进攻方 − 防守方最高战力）",
                        y_label="成功概率", y_fmt="{:.0%}", x_zero=0)
     return chart + (
-        '<p class="note">战力量级：35 级满级 power = 315，所以完整战力差全部落在图上。'
-        '每 1 点战力差 = 0.5% 胜率；好感每 20 点 = −1%。'
+        '<p class="note">战力量级：满级 ' + str(MAX_LEVEL) + ' 级 power = '
+        + str((R.power(MAX_LEVEL) if R else 315)) + '，所以完整战力差全部落在图上。'
+        '每 1 点战力差 = ' + (R.rate_percent() if R else "0.5%")
+        + ' 胜率（36 档原版为 0.5%，已按境界扩容等比例换算）；好感每 20 点 = −1%。'
         '注意 <b>强娶的钳制区间是 0%~100%</b>（不参与战力），而抢夺/打劫被强制锁在 10%~90%，'
-        '这是三条公式里唯一的结构性差异。</p>')
+        '这是三条公式里唯一的结构性差异。</p>'
+        '<p class="note">注：横轴只画了 ±330 的过渡区；满级最大战力差可达 '
+        + str((R.power(MAX_LEVEL) if R else 315)) + '，超过约 ±240 后曲线即被 10%/90% 钳制。'
+        '</p>')
 
 
 def _crossover(first_only=False):
@@ -891,7 +896,8 @@ def build_md(m, sim):
             "是" if v["power"] else "否", "是" if v["affection"] else "否",
             v["floor"] * 100, v["cap"] * 100, v["gate"], v["fine"][0], v["fine"][1]))
     A("")
-    A("统一公式：`p = base + Δpower×0.005 − (affection//20)×0.01`，"
+    A("统一公式：`p = base + Δpower×%s − (affection//20)×0.01`，"
+      % (R.rate_percent() if R else "0.5%") +
       "其中 `power = level × (level//4 + 1)`。强娶是唯一的例外（不参与战力、钳制 0~1）。\n")
 
     A("![战斗概率曲线](charts/probability.svg)\n")
