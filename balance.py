@@ -60,7 +60,7 @@ WORK_EARN_MIN = -100
 WORK_EARN_MAX_PER_LEVEL = 1000
 
 # ============================================================ 约会
-DATE_COST = 50            # 每次约会消耗
+DATE_COST = 0             # 每次约会消耗（默认 0 = 免费，填正数才收费）
 DATE_AFF_MIN = 10         # 好感增加下限
 DATE_AFF_MAX = 20         # 好感增加上限
 
@@ -136,12 +136,51 @@ REALM_DIVE_DEATH_PROB = 0.05     # 陨落（修为归零、金币保留）
 
 # ============================================================ 罚款与惩罚
 FINE_COMPENSATION_RATIO = 0.5  # 罚款中赔付给对手的比例（其余蒸发）
-#: 罚款下限：无论多穷都至少罚这么多
-FINE_FLOOR = 100
-#: 罚款上限 = 行动者现有金币 × 本值（1.0 = 最多罚光，0.5 = 最多罚一半）
-FINE_CAP_RATIO = 1.0
-FAIL_AUTISM_SECONDS = 60       # 失败后的强制自闭时长（秒）
-MAX_PENALTY_SECONDS = 60       # 自闭时长硬上限
+
+# ---- 罚款与自闭：每种犯罪独立配置，互不影响 ----
+#: 强娶失败罚款下限
+FORCE_FINE_FLOOR = 100
+#: 强娶失败罚款上限 = 行动者现有金币 × 本值
+FORCE_FINE_CAP_RATIO = 1.0
+#: 强娶失败后的自闭时长（秒）
+FORCE_AUTISM_SECONDS = 60
+
+#: 抢老婆失败罚款下限
+ROB_WIFE_FINE_FLOOR = 100
+#: 抢老婆失败罚款上限 = 行动者现有金币 × 本值
+ROB_WIFE_FINE_CAP_RATIO = 1.0
+#: 抢老婆失败后的自闭时长（秒）
+ROB_WIFE_AUTISM_SECONDS = 60
+
+#: 打劫失败罚款下限
+ROB_MONEY_FINE_FLOOR = 100
+#: 打劫失败罚款上限 = 行动者现有金币 × 本值
+ROB_MONEY_FINE_CAP_RATIO = 1.0
+#: 打劫失败后的自闭时长（秒）
+ROB_MONEY_AUTISM_SECONDS = 60
+
+MAX_PENALTY_SECONDS = 120      # 自闭时长硬上限（防止配置失误把人锁死）
+
+# ---- 冷却：每条指令独立，0 表示无冷却 ----
+COOLDOWN_DRAW = 60         # /今日老婆
+COOLDOWN_DIVORCE = 60      # /离婚
+COOLDOWN_MARRY = 60        # /娶
+COOLDOWN_DUMP = 60         # /甩掉
+COOLDOWN_MY_PARTNER = 10   # /我的伴侣（查询类，默认短）
+COOLDOWN_FORCE = 60        # /强娶
+COOLDOWN_ROB_WIFE = 60     # /抢老婆
+COOLDOWN_ROB_MONEY = 60    # /打劫
+COOLDOWN_GIVE = 30         # /送钱
+COOLDOWN_RECHARGE = 30     # /氪金
+COOLDOWN_MATING = 30       # /申请交配
+
+# ---- 离婚惩罚（默认关闭）----
+#: 开关：开启后，主动解除关系时要把一半身家分给对方
+DIVORCE_PENALTY_ENABLED = False
+#: 分走的金币比例
+DIVORCE_PENALTY_MONEY_RATIO = 0.5
+#: 分走的修为比例（按等级折算）
+DIVORCE_PENALTY_LEVEL_RATIO = 0.5
 
 # ============================================================ 交配
 MATING_AFFECTION_MIN = 100     # 允许申请交配所需的最低好感

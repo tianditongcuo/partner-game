@@ -29,8 +29,9 @@ from .utils import PersistStore, fetch_avatar_base64, format_user_display
 #: 没有这份快照，改过一次就再也找不到原值了。
 #: 数值平衡的各个配置分组（顺序无关，只用于遍历）
 _BALANCE_SECTIONS = (
-    "balance_cycle", "balance_economy", "balance_cultivation", "balance_crime",
-    "balance_penalty", "balance_social", "balance_explore", "balance_loan",
+    "balance_cycle", "balance_economy", "balance_cultivation", "balance_marriage",
+    "balance_force", "balance_rob_wife", "balance_rob_money", "balance_social",
+    "balance_explore", "balance_loan", "balance_heaven",
 )
 
 _BALANCE_DEFAULTS = {
@@ -470,19 +471,30 @@ class PartnerGamePlugin(MaiBotPlugin):
         return True
 
     # 冷却
-    def _check_cooldown(self, group_id: str, sender_qq: str, command: str) -> tuple[bool, int]:
-        """返回 (是否命中冷却, 剩余秒数)"""
+    def _cooldown_of(self, seconds=None) -> int:
+        """取某条指令的冷却秒数。传 None 时回落到全局配置，便于老配置兼容。"""
+        if seconds is not None:
+            return max(0, int(seconds))
+        return max(0, int(self.config.partner_game.cooldown_seconds or 0))
+
+    def _check_cooldown(self, group_id: str, sender_qq: str, command: str,
+                        seconds=None) -> tuple[bool, int]:
+        """返回 (是否命中冷却, 剩余秒数)。
+
+        每条指令传自己的冷却值（balance.COOLDOWN_*），实现"每个行动独立冷却"。
+        """
         key = f"{group_id}_{sender_qq}_{command}"
         now = time.time()
         last_time = self._last_action.get(key, 0.0)
-        cooldown = max(0, int(self.config.partner_game.cooldown_seconds or 60))
+        cooldown = self._cooldown_of(seconds)
         remaining = int(cooldown - (now - last_time))
         if remaining > 0:
             return True, remaining
         self._last_action[key] = now
         return False, 0
 
-    def _set_penalty(self, group_id: str, sender_qq: str, command: str, penalty_seconds: int):
+    def _set_penalty(self, group_id: str, sender_qq: str, command: str, penalty_seconds: int,
+                     cooldown=None):
         """把某条指令的"上次触发时间"往前推，制造一段额外冷却。
 
         `_check_cooldown` 的判定是 `now - last < cooldown`。
@@ -491,7 +503,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         而不是 cooldown + penalty。别改成直觉写法，会多罚一个冷却周期。
         """
         key = f"{group_id}_{sender_qq}_{command}"
-        cooldown = max(0, int(self.config.partner_game.cooldown_seconds or 60))
+        cooldown = self._cooldown_of(cooldown)
         penalty_seconds = min(penalty_seconds, B.MAX_PENALTY_SECONDS)
         self._last_action[key] = time.time() + penalty_seconds - cooldown
 
@@ -638,14 +650,37 @@ class PartnerGamePlugin(MaiBotPlugin):
                 "扣除现有金币的 %d%%（-%d，余额 %d）。" %
                 (count, int(B.TIAN_FA_MONEY_RATIO * 100), lost, user["money"]))
 
-    def _calc_fine(self, payer_money: int) -> int:
-        """按行动者身家算罚款：下限 FINE_FLOOR，上限 现有金币 × FINE_CAP_RATIO。
+    def _apply_divorce_penalty(self, group_id: str, initiator: str, partner_qq: str) -> str:
+        """离婚惩罚：发起方按比例把财富与修为分给对方（开关关闭时什么都不做）。
 
-        默认就是「最少 100，最多把身上钱罚光」。赔给对方的部分由
-        `_settle_fine` 按 FINE_COMPENSATION_RATIO 拆分，其余蒸发。
+        返回要附加到提示消息里的文案。
         """
-        floor = int(B.FINE_FLOOR)
-        cap = max(floor, int(max(0, payer_money) * B.FINE_CAP_RATIO))
+        if not B.DIVORCE_PENALTY_ENABLED:
+            return ""
+
+        a = self._get_user_data(group_id, initiator)
+        b = self._get_user_data(group_id, partner_qq)
+        money = int(max(0, a["money"]) * B.DIVORCE_PENALTY_MONEY_RATIO)
+        levels = int(a["level"] * B.DIVORCE_PENALTY_LEVEL_RATIO)
+        if money <= 0 and levels <= 0:
+            return ""
+
+        a["money"] -= money
+        b["money"] += money
+        a["level"] = max(0, a["level"] - levels)
+        b["level"] = min(MAX_LEVEL, b["level"] + levels)
+        return ("\n\n💔 离婚惩罚生效：你分给对方 %d 金币与 %d 级修为"
+                "（对方现有 %d 金币、%s）。" % (money, levels, b["money"], realm_name(b["level"])))
+
+    def _calc_fine(self, payer_money: int, floor: int, cap_ratio: float) -> int:
+        """按「该行动专属」的罚款规则算金额。
+
+        每种犯罪有自己的下限与上限比例（强娶/抢老婆/打劫互不影响）；
+        上限 = 行动者现有金币 × 比例，所以默认最多把钱罚光。
+        赔给对手的部分由 `_settle_fine` 按全局赔付比例拆分，其余蒸发。
+        """
+        floor = int(floor)
+        cap = max(floor, int(max(0, payer_money) * cap_ratio))
         return random.randint(floor, cap)
 
     def _settle_fine(self, payer: dict, receiver: dict, fine: int) -> int:
@@ -678,7 +713,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("好像是私聊呢，去群聊里找你的老婆吧。", stream_id)
             return True, "好像是私聊呢，去群聊里找你的老婆吧。", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "partner_game")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "partner_game", B.COOLDOWN_DRAW)
         if is_cd:
             await self._send_text_at(group_id, sender_qq, f"稍微休息一下再来吧~ (冷却中: {rem}秒)")
             return True, "cooldown", 2
@@ -819,7 +854,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("只能在群里离婚喔～", stream_id)
             return True, "只能在群里离婚喔～", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "divorce")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "divorce", B.COOLDOWN_DIVORCE)
         if is_cd:
             await self._send_text_at(group_id, sender_qq, f"技能冷却中，请等待 {rem} 秒后再试~")
             return True, "cooldown", 2
@@ -849,7 +884,13 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
             target_nick = await self._get_member_nick(group_id, target_qq)
-            await self._send_avatar_msg(group_id, f"你已成功和【{target_nick}({target_qq})】离婚，现在可以重新抽你的新老婆啦～", sender_qq, target_qq)
+            penalty = self._apply_divorce_penalty(group_id, sender_qq, target_qq)
+            if penalty:
+                await self._store.save()
+            await self._send_avatar_msg(
+                group_id,
+                f"你已成功和【{target_nick}({target_qq})】离婚，现在可以重新抽你的新老婆啦～{penalty}",
+                sender_qq, target_qq)
             return True, "divorced", 2
 
     @Command("proposal_reply", pattern=r".*(?:我同意|我拒绝).*")
@@ -941,7 +982,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "marry")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "marry", B.COOLDOWN_MARRY)
         if is_cd:
             await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
@@ -1022,7 +1063,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "force_marry")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "force_marry", B.COOLDOWN_FORCE)
         if is_cd:
             cd_cfg = int(self.config.partner_game.cooldown_seconds or 60)
             msg = "刚刚遭遇了挫折，还在自闭受罚中" if rem > cd_cfg else "强娶技能冷却中"
@@ -1090,14 +1131,15 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
-            fine = self._calc_fine(sender_data["money"])
+            fine = self._calc_fine(sender_data["money"], B.FORCE_FINE_FLOOR, B.FORCE_FINE_CAP_RATIO)
             target_data = self._get_user_data(group_id, target_qq)
             comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "force_marry", B.FAIL_AUTISM_SECONDS)
+            self._set_penalty(group_id, sender_qq, "force_marry",
+                              B.FORCE_AUTISM_SECONDS, B.COOLDOWN_FORCE)
             await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
@@ -1117,7 +1159,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "my_partner")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "my_partner", B.COOLDOWN_MY_PARTNER)
         if is_cd:
             await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
@@ -1172,7 +1214,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "dump_partner")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "dump_partner", B.COOLDOWN_DUMP)
         if is_cd:
             await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
@@ -1212,7 +1254,13 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
             target_nick = await self._get_member_nick(group_id, target_qq)
-            await self._send_avatar_msg(group_id, f"你已成功甩掉了【{target_nick}({target_qq})】，现在恢复自由身了~", sender_qq, target_qq)
+            penalty = self._apply_divorce_penalty(group_id, sender_qq, target_qq)
+            if penalty:
+                await self._store.save()
+            await self._send_avatar_msg(
+                group_id,
+                f"你已成功甩掉了【{target_nick}({target_qq})】，现在恢复自由身了~{penalty}",
+                sender_qq, target_qq)
             
         return True, "Dumped", 2
 
@@ -1232,7 +1280,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "rob_wife")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "rob_wife", B.COOLDOWN_ROB_WIFE)
         if is_cd:
             cd_cfg = int(self.config.partner_game.cooldown_seconds or 60)
             msg = "刚刚遭遇了挫折，还在自闭受罚中" if rem > cd_cfg else "抢夺技能冷却中"
@@ -1327,7 +1375,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
-            fine = self._calc_fine(sender_data["money"])
+            fine = self._calc_fine(sender_data["money"], B.ROB_WIFE_FINE_FLOOR, B.ROB_WIFE_FINE_CAP_RATIO)
             comp = self._settle_fine(sender_data, husband_data, fine)
             
             injury_msg = ""
@@ -1339,7 +1387,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_wife", B.FAIL_AUTISM_SECONDS)
+            self._set_penalty(group_id, sender_qq, "rob_wife",
+                              B.ROB_WIFE_AUTISM_SECONDS, B.COOLDOWN_ROB_WIFE)
             await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
@@ -1439,7 +1488,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
 
-        is_cd, rem = self._check_cooldown(group_id, sender_qq, "rob_money")
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "rob_money", B.COOLDOWN_ROB_MONEY)
         if is_cd:
             await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
@@ -1498,13 +1547,14 @@ class PartnerGamePlugin(MaiBotPlugin):
                 
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
-            fine = self._calc_fine(sender_data["money"])
+            fine = self._calc_fine(sender_data["money"], B.ROB_MONEY_FINE_FLOOR, B.ROB_MONEY_FINE_CAP_RATIO)
             comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_money", B.FAIL_AUTISM_SECONDS)
+            self._set_penalty(group_id, sender_qq, "rob_money",
+                              B.ROB_MONEY_AUTISM_SECONDS, B.COOLDOWN_ROB_MONEY)
             await self._send_avatar_msg(group_id, f"打劫失败！【{target_nick}({target_qq})】战力爆发奋起反抗，不仅将你击退，官府还对你罚款了 {fine} 金币，并关入1分钟自闭小黑屋！\n（其中 {comp} 金币已作为正当防卫精神损失费赔偿给对方）", sender_qq, target_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
@@ -1675,7 +1725,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Single", 2
 
         user_data = self._get_user_data(group_id, sender_qq)
-        if user_data["money"] < B.DATE_COST:
+        if B.DATE_COST > 0 and user_data["money"] < B.DATE_COST:
             await self._send_avatar_msg(group_id, "你的存款连 50 金币都没有，拿什么给伴侣买礼物？快去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
 
@@ -1703,7 +1753,11 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         partner_nick = await self._get_partner_nick(group_id, marriage)
         total_aff = rec["affection"] if rec else add_aff
-        await self._send_avatar_msg(group_id, f"你花费 50 金币与【{partner_nick}】去约会，感情升温了！\n好感度 +{add_aff}，当前总好感度：{total_aff}", sender_qq, "")
+        cost_text = f"花费 {B.DATE_COST} 金币" if B.DATE_COST > 0 else "分文未花"
+        await self._send_avatar_msg(
+            group_id,
+            f"你{cost_text}与【{partner_nick}】约会，感情升温了！\n好感度 +{add_aff}，当前总好感度：{total_aff}",
+            sender_qq, "")
         return True, "Date done", 2
 
     @Command("cultivate", pattern=r"^\s*(?:/修炼|修炼)$")
@@ -2231,7 +2285,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, "你还背着逾期的贷款，不能往外送钱。先去【/还贷】吧。", sender_qq, "")
             return True, "loan_overdue", 2
 
-        is_cd, remaining = self._check_cooldown(group_id, sender_qq, "give_money")
+        is_cd, remaining = self._check_cooldown(group_id, sender_qq, "give_money", B.COOLDOWN_GIVE)
         if is_cd:
             await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {remaining} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2

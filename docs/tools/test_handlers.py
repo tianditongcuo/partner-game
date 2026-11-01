@@ -221,7 +221,8 @@ async def run(mod, pkg):
     ok &= (users["u1"]["money"] == 20000)
 
     # ---- 动态罚款：下限 100，上限 = 现有金币 ----
-    fines = [p._calc_fine(m) for m in (300, 800, 5000) for _ in range(200)]
+    fines = [p._calc_fine(m, B.FORCE_FINE_FLOOR, B.FORCE_FINE_CAP_RATIO)
+             for m in (300, 800, 5000) for _ in range(200)]
     in_range = all(100 <= f <= 5000 for f in fines)
     results.append(("罚款区间", "min=%d max=%d" % (min(fines), max(fines)), "应落在 100~5000"))
     ok &= in_range
@@ -307,6 +308,43 @@ async def run(mod, pkg):
     ok &= bool(kept and cleared)
     results.append(("管理员重置", "保留 修为33/金币777" if kept else "保留了不该保留的",
                     "清空 %s" % ("成功" if cleared else "失败")))
+
+    # ---- 约会免费：0 金币也能约会 ----
+    reset()
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 0}}
+    users["u1"] = {"money": 0, "level": 0, "last_allowance": today}
+    ctx("u1")
+    with patch.object(random, "randint", return_value=15):
+        r = await p.handle_date(stream_id="", message={"processed_plain_text": "/约会"})
+    ok &= (users["u1"]["money"] == 0 and r[1] == "Date done")
+    results.append(("约会免费", "余额=%s" % users["u1"]["money"], "应为 0（不扣钱）"))
+
+    # ---- 离婚惩罚：开启后分走一半财富与修为 ----
+    reset()
+    B.DIVORCE_PENALTY_ENABLED = True
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 0}}
+    users["u1"] = {"money": 1000, "level": 20, "last_allowance": today}
+    users["u2"] = {"money": 0, "level": 0, "last_allowance": today}
+    ctx("u1")
+    with patch.object(random, "randint", return_value=500):
+        r = await p.handle_wife_draw(stream_id="", message={"processed_plain_text": "/离婚"})
+    moved = (users["u1"]["money"] == 500 and users["u2"]["money"] == 500
+             and users["u1"]["level"] == 10 and users["u2"]["level"] == 10)
+    ok &= moved
+    results.append(("离婚惩罚", "u1 %s/%s  u2 %s/%s" % (users["u1"]["money"], users["u1"]["level"],
+                                                     users["u2"]["money"], users["u2"]["level"]),
+                    "应各 500 金币 / 10 级"))
+    B.DIVORCE_PENALTY_ENABLED = False
+
+    # ---- 按行动独立冷却 ----
+    reset()
+    _, first = p._check_cooldown(G, "u7", "rob_money", 5)
+    hit2, rem2 = p._check_cooldown(G, "u7", "rob_money", 5)
+    hit3, _ = p._check_cooldown(G, "u7", "rob_wife", 5)
+    ok &= (first == 0 and hit2 and not hit3)
+    results.append(("独立冷却", "第二次 rob_money 剩余 %ds，rob_wife 不受影响" % rem2, "互不干扰"))
 
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)

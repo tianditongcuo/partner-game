@@ -112,10 +112,7 @@ class PartnerGameSection(PluginConfigBase):
 class BalanceCycleSection(PluginConfigBase):
     """① 周期与次数 —— 多久结算一次、每周期各项能做几次。
 
-    次数类字段的三种填法：
-      - 留空：用 balance.py 的默认值；
-      - 填「不限制」或负数：不限次；
-      - 填 0：完全禁用该功能。
+    次数类字段的三种填法：留空=默认值；「不限制」或负数=不限次；0=禁用。
     """
 
     __ui_label__: ClassVar[str] = "① 周期与次数"
@@ -172,18 +169,16 @@ class BalanceEconomySection(PluginConfigBase):
         json_schema_extra={"label": "周期低保", "placeholder": "默认 200", "order": 21, "step": 50})
     work_earn_min: Optional[int] = Field(
         default=None,
-        description=(
-            "打工收益下限，**可以为负** —— 负数代表这一趟倒贴（亏本）。\n"
-            "实际收益在「下限」与「上限」之间随机。默认 -100。"
-        ),
+        description="打工收益下限，**可以为负**（负数=亏本倒贴）。实际收益在上限之间随机。默认 -100。",
         json_schema_extra={"label": "打工收益下限（可为负）", "placeholder": "默认 -100", "order": 22, "step": 10})
     work_earn_max_per_level: Optional[int] = Field(
         default=None,
         description="打工收益上限 = 当前境界等级 × 本值。默认 1000（20 级最多赚 20000）。",
         json_schema_extra={"label": "打工收益上限系数", "placeholder": "默认 1000", "order": 23, "step": 100})
     date_cost: Optional[int] = Field(
-        default=None, description="每次 /约会 消耗的金币。默认 50。",
-        json_schema_extra={"label": "约会消耗", "placeholder": "默认 50", "order": 24, "step": 10})
+        default=None,
+        description="每次 /约会 消耗的金币。**默认 0 = 免费**；填正数才会扣钱。",
+        json_schema_extra={"label": "约会消耗（0=免费）", "placeholder": "默认 0", "order": 24, "step": 10})
     date_aff_min: Optional[int] = Field(
         default=None, description="每次约会增加的好感下限。默认 10。",
         json_schema_extra={"label": "约会好感下限", "placeholder": "默认 10", "order": 25, "step": 1})
@@ -214,165 +209,255 @@ class BalanceCultivationSection(PluginConfigBase):
     recharge_coins_per_percent: Optional[int] = Field(
         default=None,
         description=(
-            "氪金换算：每多少金币换 1% 的下次行动成功率。默认 100。\n"
-            "/氪金 1000 就是 +10%，作用于 /打劫 /强娶 /下秘境 /修炼 的下一次行动，用掉即清零。"
+            "氪金换算：每多少金币换 1% 下次行动成功率。默认 100（氪 1000 = +10%）。\n"
+            "作用于下一次 /打劫 /强娶 /下秘境 /修炼，用掉即清零。"
         ),
         json_schema_extra={"label": "氪金换算（金币/1%）", "placeholder": "默认 100", "order": 34, "step": 50})
     recharge_cap: Optional[float] = Field(
-        default=None,
-        description="氪金加成的总上限，0~1。默认 0.99（最高 99%）。",
+        default=None, description="氪金加成总上限，0~1。默认 0.99（最高 99%）。",
         json_schema_extra={"label": "氪金加成上限", "placeholder": "默认 0.99", "order": 35, "step": 0.01})
     recharge_min_amount: Optional[int] = Field(
         default=None, description="单次 /氪金 的最低金额。默认 100。",
         json_schema_extra={"label": "单次氪金下限", "placeholder": "默认 100", "order": 36, "step": 50})
 
 
-class BalanceCrimeSection(PluginConfigBase):
-    """④ 犯罪与胜率 —— 强娶 / 抢老婆 / 打劫 的门槛、概率与金额。"""
+class BalanceMarriageSection(PluginConfigBase):
+    """④ 婚姻与冷却 —— 抽取/离婚/求婚/甩人/查询 各自的冷却，以及离婚惩罚开关。"""
 
-    __ui_label__: ClassVar[str] = "④ 犯罪与胜率"
+    __ui_label__: ClassVar[str] = "④ 婚姻与冷却"
     __ui_order__: ClassVar[int] = 5
 
-    force_gate: Optional[int] = Field(
-        default=None, description="发起 /强娶 需要的金币余额。默认 300。",
-        json_schema_extra={"label": "强娶金币门槛", "placeholder": "默认 300", "order": 40, "step": 50})
-    rob_wife_gate: Optional[int] = Field(
-        default=None, description="发起 /抢老婆 需要的金币余额。默认 500。",
-        json_schema_extra={"label": "抢老婆金币门槛", "placeholder": "默认 500", "order": 41, "step": 50})
-    rob_money_gate: Optional[int] = Field(
-        default=None, description="发起 /打劫 需要的金币余额。默认 300。",
-        json_schema_extra={"label": "打劫金币门槛", "placeholder": "默认 300", "order": 42, "step": 50})
-    rob_floor: Optional[float] = Field(
-        default=None, description="抢夺/打劫的胜率下限。默认 0.1（10%）。",
-        json_schema_extra={"label": "胜率下限", "placeholder": "默认 0.1", "order": 43, "step": 0.01})
-    rob_cap: Optional[float] = Field(
-        default=None, description="抢夺/打劫的胜率上限。默认 0.9（90%）。氪金可突破到氪金上限。",
-        json_schema_extra={"label": "胜率上限", "placeholder": "默认 0.9", "order": 44, "step": 0.01})
-    rob_money_cap_ratio: Optional[float] = Field(
+    cooldown_draw: Optional[int] = Field(
+        default=None, description="/今日老婆 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "抽老婆冷却（秒）", "placeholder": "默认 60", "order": 40, "step": 10})
+    cooldown_divorce: Optional[int] = Field(
+        default=None, description="/离婚 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "离婚冷却（秒）", "placeholder": "默认 60", "order": 41, "step": 10})
+    cooldown_marry: Optional[int] = Field(
+        default=None, description="/娶 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "求婚冷却（秒）", "placeholder": "默认 60", "order": 42, "step": 10})
+    cooldown_dump: Optional[int] = Field(
+        default=None, description="/甩掉 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "甩掉冷却（秒）", "placeholder": "默认 60", "order": 43, "step": 10})
+    cooldown_my_partner: Optional[int] = Field(
+        default=None, description="/我的伴侣 的冷却秒数，查询类可以设短些。默认 10。",
+        json_schema_extra={"label": "查询伴侣冷却（秒）", "placeholder": "默认 10", "order": 44, "step": 5})
+    cooldown_mating: Optional[int] = Field(
+        default=None, description="/申请交配 的冷却秒数。默认 30。",
+        json_schema_extra={"label": "交配冷却（秒）", "placeholder": "默认 30", "order": 45, "step": 10})
+
+    divorce_penalty_enabled: Optional[bool] = Field(
         default=None,
         description=(
-            "单次打劫最多抢走受害者当前金币的多少倍。默认 1.5（最多打成 -50% 负债）。\n"
-            "填 1.0 表示最多抢光、不负债。"
+            "**离婚惩罚开关**。开启后，主动解除关系（/离婚、/甩掉）时，"
+            "发起方要把约定比例的财富与修为分给对方。默认关闭。"
         ),
-        json_schema_extra={"label": "打劫上限倍数", "placeholder": "默认 1.5", "order": 45, "step": 0.1})
-    rob_money_negative_cap: Optional[int] = Field(
-        default=None, description="受害者资产 ≤ 0 时单次打劫的金额上限。默认 100。",
-        json_schema_extra={"label": "负资产打劫上限", "placeholder": "默认 100", "order": 46, "step": 10})
+        json_schema_extra={"label": "启用离婚惩罚", "placeholder": "默认关闭", "order": 46})
+    divorce_penalty_money_ratio: Optional[float] = Field(
+        default=None, description="离婚惩罚：分走对方「现有金币」的比例。默认 0.5（一半）。",
+        json_schema_extra={"label": "离婚分走金币比例", "placeholder": "默认 0.5", "order": 47, "step": 0.1})
+    divorce_penalty_level_ratio: Optional[float] = Field(
+        default=None, description="离婚惩罚：分走对方「境界等级」的比例。默认 0.5（一半）。",
+        json_schema_extra={"label": "离婚分走修为比例", "placeholder": "默认 0.5", "order": 48, "step": 0.1})
 
 
-class BalancePenaltySection(PluginConfigBase):
-    """⑤ 罚款与惩罚 —— 失败要付出什么，以及天罚。"""
+class BalanceForceSection(PluginConfigBase):
+    """⑤ 强娶 —— 本行动专属的门槛、罚款、自闭与冷却。"""
 
-    __ui_label__: ClassVar[str] = "⑤ 罚款与惩罚"
+    __ui_label__: ClassVar[str] = "⑤ 强娶"
     __ui_order__: ClassVar[int] = 6
 
-    fine_floor: Optional[int] = Field(
-        default=None, description="强娶/抢老婆/打劫失败的罚款下限，无论多穷都至少罚这么多。默认 100。",
-        json_schema_extra={"label": "罚款下限", "placeholder": "默认 100", "order": 50, "step": 10})
-    fine_cap_ratio: Optional[float] = Field(
+    force_gate: Optional[int] = Field(
+        default=None, description="/强娶 需要的金币余额（不够则无法发起）。默认 300。",
+        json_schema_extra={"label": "金币门槛", "placeholder": "默认 300", "order": 50, "step": 50})
+    force_fine_floor: Optional[int] = Field(
+        default=None, description="强娶失败的罚款下限。默认 100。",
+        json_schema_extra={"label": "失败罚款下限", "placeholder": "默认 100", "order": 51, "step": 10})
+    force_fine_cap_ratio: Optional[float] = Field(
         default=None,
-        description="罚款上限 = 行动者现有金币 × 本值。默认 1.0（最多罚光）。实际罚款在上下限之间随机。",
-        json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 51, "step": 0.1})
-    fine_compensation_ratio: Optional[float] = Field(
+        description="强娶失败的罚款上限 = 行动者现有金币 × 本值。默认 1.0（最多罚光）。",
+        json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 52, "step": 0.1})
+    force_autism_seconds: Optional[int] = Field(
+        default=None, description="强娶失败后的自闭秒数。默认 60。",
+        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 53, "step": 10})
+    cooldown_force: Optional[int] = Field(
+        default=None, description="/强娶 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 54, "step": 10})
+
+
+class BalanceRobWifeSection(PluginConfigBase):
+    """⑥ 抢老婆 —— 本行动专属的门槛、罚款、掉级、自闭与冷却。"""
+
+    __ui_label__: ClassVar[str] = "⑥ 抢老婆"
+    __ui_order__: ClassVar[int] = 7
+
+    rob_wife_gate: Optional[int] = Field(
+        default=None, description="/抢老婆 需要的金币余额。默认 500。",
+        json_schema_extra={"label": "金币门槛", "placeholder": "默认 500", "order": 60, "step": 50})
+    rob_wife_fine_floor: Optional[int] = Field(
+        default=None, description="抢老婆失败的罚款下限。默认 100。",
+        json_schema_extra={"label": "失败罚款下限", "placeholder": "默认 100", "order": 61, "step": 10})
+    rob_wife_fine_cap_ratio: Optional[float] = Field(
+        default=None, description="抢老婆失败的罚款上限 = 行动者现有金币 × 本值。默认 1.0。",
+        json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 62, "step": 0.1})
+    rob_wife_drop_chance: Optional[float] = Field(
+        default=None, description="抢老婆失败后被反杀掉 1 级的概率。默认 0.2。",
+        json_schema_extra={"label": "失败掉级概率", "placeholder": "默认 0.2", "order": 63, "step": 0.05})
+    rob_wife_autism_seconds: Optional[int] = Field(
+        default=None, description="抢老婆失败后的自闭秒数。默认 60。",
+        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 64, "step": 10})
+    cooldown_rob_wife: Optional[int] = Field(
+        default=None, description="/抢老婆 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 65, "step": 10})
+
+
+class BalanceRobMoneySection(PluginConfigBase):
+    """⑦ 打劫 —— 本行动专属的门槛、金额、罚款、自闭与冷却。"""
+
+    __ui_label__: ClassVar[str] = "⑦ 打劫"
+    __ui_order__: ClassVar[int] = 8
+
+    rob_money_gate: Optional[int] = Field(
+        default=None, description="/打劫 需要的金币余额。默认 300。",
+        json_schema_extra={"label": "金币门槛", "placeholder": "默认 300", "order": 70, "step": 50})
+    rob_money_cap_ratio: Optional[float] = Field(
         default=None,
-        description="罚款中赔付给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。",
-        json_schema_extra={"label": "罚款赔付比例", "placeholder": "默认 0.5", "order": 52, "step": 0.05})
-    fail_autism_seconds: Optional[int] = Field(
+        description="单次最多抢走受害者金币的倍数。默认 1.5（最多打成 -50% 负债）；1.0 = 最多抢光。",
+        json_schema_extra={"label": "劫掠上限倍数", "placeholder": "默认 1.5", "order": 71, "step": 0.1})
+    rob_money_negative_cap: Optional[int] = Field(
+        default=None, description="受害者资产 ≤ 0 时单次打劫的金额上限。默认 100。",
+        json_schema_extra={"label": "负资产打劫上限", "placeholder": "默认 100", "order": 72, "step": 10})
+    rob_money_fine_floor: Optional[int] = Field(
+        default=None, description="打劫失败的罚款下限。默认 100。",
+        json_schema_extra={"label": "失败罚款下限", "placeholder": "默认 100", "order": 73, "step": 10})
+    rob_money_fine_cap_ratio: Optional[float] = Field(
+        default=None, description="打劫失败的罚款上限 = 行动者现有金币 × 本值。默认 1.0。",
+        json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 74, "step": 0.1})
+    rob_money_autism_seconds: Optional[int] = Field(
+        default=None, description="打劫失败后的自闭秒数。默认 60。",
+        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 75, "step": 10})
+    cooldown_rob_money: Optional[int] = Field(
+        default=None, description="/打劫 的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 76, "step": 10})
+    rob_floor: Optional[float] = Field(
         default=None,
-        description="犯罪失败后的强制自闭时长（秒），期间该指令不可再用。默认 60，与普通冷却叠加。",
-        json_schema_extra={"label": "失败自闭秒数", "placeholder": "默认 60", "order": 53, "step": 10})
-    max_penalty_seconds: Optional[int] = Field(
-        default=None, description="自闭时长的硬上限（秒），防止配置失误把人永久锁死。默认 60。",
-        json_schema_extra={"label": "自闭时长硬上限", "placeholder": "默认 60", "order": 54, "step": 10})
-    tian_fa_crime_threshold: Optional[int] = Field(
+        description="抢夺/打劫的胜率下限，再劣势也不会低于它。默认 0.1（10%）。",
+        json_schema_extra={"label": "胜率下限（共用）", "placeholder": "默认 0.1", "order": 77, "step": 0.01})
+    rob_cap: Optional[float] = Field(
         default=None,
-        description=(
-            "天罚：每周期内「打劫 + 强娶 + 抢老婆」的总次数超过此值即触发，每周期只触发一次。\n"
-            "默认 8。填 0 或负数 = 关闭天罚。"
-        ),
-        json_schema_extra={"label": "天罚触发次数", "placeholder": "默认 8", "order": 55, "step": 1})
-    tian_fa_money_ratio: Optional[float] = Field(
-        default=None, description="天罚惩罚：扣除现有金币的比例。默认 0.6（扣 60%）。",
-        json_schema_extra={"label": "天罚扣钱比例", "placeholder": "默认 0.6", "order": 56, "step": 0.1})
-    realm_dive_death_prob: Optional[float] = Field(
-        default=None,
-        description="下秘境陨落的概率：修为归零、金币保留。默认 0.05。属于惩罚类结果。",
-        json_schema_extra={"label": "秘境·陨落概率", "placeholder": "默认 0.05", "order": 57, "step": 0.01})
-    tian_du_success_threshold: Optional[int] = Field(
-        default=None,
-        description=(
-            "天妒：每周期内「修炼成功」达到此次数即触发，修为倒退若干大境界，每周期只触发一次。\n"
-            "默认 6。填 0 或负数 = 关闭天妒。"
-        ),
-        json_schema_extra={"label": "天妒触发次数", "placeholder": "默认 6", "order": 58, "step": 1})
-    tian_du_drop_realms: Optional[int] = Field(
-        default=None, description="天妒惩罚：修为倒退几个大境界（1 个大境界 = 4 级）。默认 3。",
-        json_schema_extra={"label": "天妒倒退境界数", "placeholder": "默认 3", "order": 59, "step": 1})
+        description="抢夺/打劫的胜率上限，再优势也不会超过它。默认 0.9（90%）。氪金可突破到氪金上限。",
+        json_schema_extra={"label": "胜率上限（共用）", "placeholder": "默认 0.9", "order": 78, "step": 0.01})
 
 
 class BalanceSocialSection(PluginConfigBase):
-    """⑥ 好感与交配 —— 护盾强度与夫妻互动。"""
+    """⑧ 好感与交配 —— 好感度怎么保护夫妻、夫妻怎么互动。
 
-    __ui_label__: ClassVar[str] = "⑥ 好感与交配"
-    __ui_order__: ClassVar[int] = 7
+    好感护盾是什么（直白版）：
+      夫妻一起约会、交配会积累「好感度」。
+      当别人来 /抢老婆 时，好感度会直接抵扣对方的成功率 ——
+      每 X 点好感抵扣 1%，但最多只抵扣到上限（默认 50%）。
+      也就是说：好感越高越安全，但永远无法完全免疫被抢。
+    """
+
+    __ui_label__: ClassVar[str] = "⑧ 好感与交配"
+    __ui_order__: ClassVar[int] = 9
 
     affection_per_shield: Optional[int] = Field(
-        default=None, description="每多少点夫妻好感抵消一档胜率（防黄毛的护盾）。默认 20。",
-        json_schema_extra={"label": "护盾档位", "placeholder": "默认 20", "order": 60, "step": 1})
+        default=None,
+        description="每多少点好感抵扣 1% 被抢成功率。默认 20（即 100 好感 = -5%）。",
+        json_schema_extra={"label": "好感抵扣档位", "placeholder": "默认 20", "order": 80, "step": 1})
     affection_shield_rate: Optional[float] = Field(
-        default=None, description="每档护盾抵消多少胜率。默认 0.01（每 20 好感减 1%）。",
-        json_schema_extra={"label": "护盾效率", "placeholder": "默认 0.01", "order": 61, "step": 0.005})
+        default=None, description="每档抵扣多少成功率。默认 0.01（1%）。一般只改上面那个档位即可。",
+        json_schema_extra={"label": "每档抵扣比例", "placeholder": "默认 0.01", "order": 81, "step": 0.005})
     affection_shield_max: Optional[float] = Field(
         default=None,
-        description="护盾的**硬上限**：好感再高，也最多抵消这么多胜率。默认 0.50（50%）。",
-        json_schema_extra={"label": "护盾硬上限", "placeholder": "默认 0.5", "order": 62, "step": 0.05})
+        description="抵扣的**硬上限**：好感堆再高，也最多抵扣这么多。默认 0.5（50%）。",
+        json_schema_extra={"label": "抵扣硬上限", "placeholder": "默认 0.5", "order": 82, "step": 0.05})
     mating_affection_min: Optional[int] = Field(
-        default=None, description="申请交配所需的最低夫妻好感。默认 100。",
-        json_schema_extra={"label": "交配所需好感", "placeholder": "默认 100", "order": 63, "step": 10})
+        default=None, description="申请交配所需的最低好感。默认 100。",
+        json_schema_extra={"label": "交配所需好感", "placeholder": "默认 100", "order": 83, "step": 10})
     mating_affection_gain: Optional[int] = Field(
         default=None, description="每次成功交配增加的好感。默认 50。",
-        json_schema_extra={"label": "交配好感增益", "placeholder": "默认 50", "order": 64, "step": 10})
+        json_schema_extra={"label": "交配好感增益", "placeholder": "默认 50", "order": 84, "step": 10})
     mating_timeout_seconds: Optional[int] = Field(
         default=None, description="交配申请的有效期（秒），超时作废。默认 120。",
-        json_schema_extra={"label": "交配申请有效期", "placeholder": "默认 120", "order": 65, "step": 10})
+        json_schema_extra={"label": "交配申请有效期", "placeholder": "默认 120", "order": 85, "step": 10})
 
 
 class BalanceExploreSection(PluginConfigBase):
-    """⑦ 下秘境 —— 只有收益与好/坏结果的概率（陨落属于惩罚，见 ⑤）。"""
+    """⑨ 下秘境 —— 只有收益与好/坏结果的概率（陨落属于天道惩戒）。"""
 
-    __ui_label__: ClassVar[str] = "⑦ 下秘境"
-    __ui_order__: ClassVar[int] = 8
+    __ui_label__: ClassVar[str] = "⑨ 下秘境"
+    __ui_order__: ClassVar[int] = 10
 
     realm_dive_money_min_factor: Optional[int] = Field(
         default=None, description="金币收益下限 = 境界等级 × 本值。默认 10。",
-        json_schema_extra={"label": "金币下限系数", "placeholder": "默认 10", "order": 70, "step": 10})
+        json_schema_extra={"label": "金币下限系数", "placeholder": "默认 10", "order": 90, "step": 10})
     realm_dive_money_max_factor: Optional[int] = Field(
         default=None, description="金币收益上限 = 境界等级 × 本值。默认 10000。",
-        json_schema_extra={"label": "金币上限系数", "placeholder": "默认 10000", "order": 71, "step": 500})
+        json_schema_extra={"label": "金币上限系数", "placeholder": "默认 10000", "order": 91, "step": 500})
     realm_dive_gold_prob: Optional[float] = Field(
-        default=None, description="获得金币的概率。默认 0.70。与暴涨/倒退/陨落合计应≈1。",
-        json_schema_extra={"label": "得金币概率", "placeholder": "默认 0.70", "order": 72, "step": 0.05})
+        default=None, description="获得金币的概率。默认 0.70。与其他结果合计应≈1。",
+        json_schema_extra={"label": "得金币概率", "placeholder": "默认 0.70", "order": 92, "step": 0.05})
     realm_dive_surge_prob: Optional[float] = Field(
         default=None, description="修为暴涨一个大境界（+4 级）的概率。默认 0.15。",
-        json_schema_extra={"label": "暴涨概率", "placeholder": "默认 0.15", "order": 73, "step": 0.05})
+        json_schema_extra={"label": "暴涨概率", "placeholder": "默认 0.15", "order": 93, "step": 0.05})
     realm_dive_fall_prob: Optional[float] = Field(
         default=None, description="修为倒退一个大境界（-4 级）的概率。默认 0.10。",
-        json_schema_extra={"label": "倒退概率", "placeholder": "默认 0.10", "order": 74, "step": 0.05})
+        json_schema_extra={"label": "倒退概率", "placeholder": "默认 0.10", "order": 94, "step": 0.05})
 
 
 class BalanceLoanSection(PluginConfigBase):
-    """⑧ 贷款 —— 向天道借钱与逾期惩罚。"""
+    """⑩ 贷款 —— 向天道借钱与逾期惩罚。"""
 
-    __ui_label__: ClassVar[str] = "⑧ 贷款"
-    __ui_order__: ClassVar[int] = 9
+    __ui_label__: ClassVar[str] = "⑩ 贷款"
+    __ui_order__: ClassVar[int] = 11
 
     loan_repay_multiplier: Optional[float] = Field(
         default=None, description="还款倍数：借 100 需还 100 × 本值。默认 2.0。",
-        json_schema_extra={"label": "还款倍数", "placeholder": "默认 2.0", "order": 80, "step": 0.1})
+        json_schema_extra={"label": "还款倍数", "placeholder": "默认 2.0", "order": 100, "step": 0.1})
     loan_grace_minutes: Optional[int] = Field(
         default=None,
         description="贷款时限（分钟）。超时未还清只能 /打工 /下秘境 /还贷，直到结清。默认 15。",
-        json_schema_extra={"label": "贷款时限（分钟）", "placeholder": "默认 15", "order": 81, "step": 5})
+        json_schema_extra={"label": "贷款时限（分钟）", "placeholder": "默认 15", "order": 101, "step": 5})
+
+
+class BalanceHeavenSection(PluginConfigBase):
+    """⑪ 天道惩戒 —— 天妒、天罚、秘境陨落这类全局惩罚。"""
+
+    __ui_label__: ClassVar[str] = "⑪ 天道惩戒"
+    __ui_order__: ClassVar[int] = 12
+
+    tian_du_success_threshold: Optional[int] = Field(
+        default=None,
+        description=(
+            "天妒：每周期内「修炼成功」达到此次数即触发，修为倒退若干大境界，每周期一次。\n"
+            "默认 6。填 0 或负数 = 关闭天妒。"
+        ),
+        json_schema_extra={"label": "天妒触发次数", "placeholder": "默认 6", "order": 110, "step": 1})
+    tian_du_drop_realms: Optional[int] = Field(
+        default=None, description="天妒惩罚：修为倒退几个大境界（1 个 = 4 级）。默认 3。",
+        json_schema_extra={"label": "天妒倒退境界数", "placeholder": "默认 3", "order": 111, "step": 1})
+    tian_fa_crime_threshold: Optional[int] = Field(
+        default=None,
+        description=(
+            "天罚：每周期内「打劫+强娶+抢老婆」总次数超过此值即触发，扣金币，每周期一次。\n"
+            "默认 8。填 0 或负数 = 关闭天罚。"
+        ),
+        json_schema_extra={"label": "天罚触发次数", "placeholder": "默认 8", "order": 112, "step": 1})
+    tian_fa_money_ratio: Optional[float] = Field(
+        default=None, description="天罚惩罚：扣除现有金币的比例。默认 0.6（60%）。",
+        json_schema_extra={"label": "天罚扣钱比例", "placeholder": "默认 0.6", "order": 113, "step": 0.1})
+    realm_dive_death_prob: Optional[float] = Field(
+        default=None, description="下秘境陨落的概率：修为归零、金币保留。默认 0.05。",
+        json_schema_extra={"label": "秘境·陨落概率", "placeholder": "默认 0.05", "order": 114, "step": 0.01})
+    fine_compensation_ratio: Optional[float] = Field(
+        default=None,
+        description="所有罚款中赔付给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。",
+        json_schema_extra={"label": "罚款赔付比例", "placeholder": "默认 0.5", "order": 115, "step": 0.05})
+    max_penalty_seconds: Optional[int] = Field(
+        default=None, description="自闭时长的硬上限（秒），防止配置失误把人永久锁死。默认 120。",
+        json_schema_extra={"label": "自闭硬上限（秒）", "placeholder": "默认 120", "order": 116, "step": 10})
 
 
 class PartnerGameConfig(PluginConfigBase):
@@ -382,10 +467,13 @@ class PartnerGameConfig(PluginConfigBase):
     balance_cycle: BalanceCycleSection = Field(default_factory=BalanceCycleSection)
     balance_economy: BalanceEconomySection = Field(default_factory=BalanceEconomySection)
     balance_cultivation: BalanceCultivationSection = Field(default_factory=BalanceCultivationSection)
-    balance_crime: BalanceCrimeSection = Field(default_factory=BalanceCrimeSection)
-    balance_penalty: BalancePenaltySection = Field(default_factory=BalancePenaltySection)
+    balance_marriage: BalanceMarriageSection = Field(default_factory=BalanceMarriageSection)
+    balance_force: BalanceForceSection = Field(default_factory=BalanceForceSection)
+    balance_rob_wife: BalanceRobWifeSection = Field(default_factory=BalanceRobWifeSection)
+    balance_rob_money: BalanceRobMoneySection = Field(default_factory=BalanceRobMoneySection)
     balance_social: BalanceSocialSection = Field(default_factory=BalanceSocialSection)
     balance_explore: BalanceExploreSection = Field(default_factory=BalanceExploreSection)
     balance_loan: BalanceLoanSection = Field(default_factory=BalanceLoanSection)
+    balance_heaven: BalanceHeavenSection = Field(default_factory=BalanceHeavenSection)
 
 

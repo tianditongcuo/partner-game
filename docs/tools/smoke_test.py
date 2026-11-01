@@ -152,7 +152,7 @@ def main():
 
             p.config = SimpleNamespace(
                 balance_cycle=SimpleNamespace(work_limit=7, cycle_hours=12),
-                balance_crime=SimpleNamespace(rob_cap=0.75),
+                balance_rob_money=SimpleNamespace(rob_cap=0.75),
                 balance_cultivation=SimpleNamespace(cultivate_cost_base=80))
             p._apply_balance_overrides()
             assert pkg.balance.WORK_LIMIT == 7, pkg.balance.WORK_LIMIT
