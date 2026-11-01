@@ -18,9 +18,18 @@ import math
 import os
 import random
 import re
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DOCS = os.path.join(ROOT, "docs")
+
+sys.path.insert(0, ROOT)
+try:
+    import realms as R
+    MAX_LEVEL = R.MAX_LEVEL
+except Exception:                            # 插件损坏时不影响文档渲染
+    R = None
+    MAX_LEVEL = 35
 
 # 指令中文名（人工映射，比 pattern 好读）
 CMD_LABEL = {
@@ -86,10 +95,10 @@ DOMAIN_DETAIL = {
         ("管理员发放", "/发钱、/全服补偿：金额不设上限、不校验溢出", "plugin.py:1763-1835"),
     ],
     "cultivation": [
-        ("等级空间", "0~35 共 36 档；9 大境界 × 4 小境界，表在 3 处重复硬编码", "plugin.py:1515, 1560, 1649"),
+        ("等级空间", "0~99 共 100 档；25 大境界 × 4 小境界，已收口到 realms.py 单一数据源", "realms.py:29-34"),
         ("修炼消耗", "(大境界序号 + 1) × 50 金币，每日 3 次", "plugin.py:1499-1500"),
         ("突破判定", "小境界 80% 成功；大境界 40% 成功，失败再 30% 掉 1 级", "plugin.py:1512-1540"),
-        ("战力换算", "power = level × (level//4 + 1)，非线性阶梯", "plugin.py:1023-1024"),
+        ("战力换算", "power = level × (level//4 + 1)，非线性阶梯；4 处调用已统一走 realms.power()", "realms.py:112-115"),
         ("战斗掉级", "抢老婆失败且 level>0 时 20% 概率掉 1 级", "plugin.py:1072-1074"),
     ],
     "combat": [
@@ -172,9 +181,9 @@ def simulate_cultivation(runs=20000, seed=7):
     for _ in range(runs):
         level, money, n = 0, 0, 0
         guard = 0
-        while level < 35 and guard < 5000:
+        while level < MAX_LEVEL and guard < 50000:
             guard += 1
-            money += (level // 4 + 1) * 50
+            money += R.cultivate_cost(level) if R else (level // 4 + 1) * 50
             n += 1
             if level % 4 == 3:
                 if random.random() < 0.4:
@@ -198,7 +207,7 @@ def simulate_cultivation(runs=20000, seed=7):
 
 
 def power(level):
-    return level * (level // 4 + 1)
+    return R.power(level) if R else level * (level // 4 + 1)
 
 
 def combat_curve(kind, affection=0):
@@ -496,7 +505,7 @@ def section_probability(m):
 
 
 def section_cultivation(m, sim):
-    lv = list(range(0, 36))
+    lv = list(range(0, MAX_LEVEL + 1))
     cost_pts = [(l, 3 * ((l // 4 + 1) * 50)) for l in lv]          # 3 次/天的修炼支出
     inc_pts = [(l, 3 * (75 + 10 * l)) for l in lv]                  # 3 次/天的打工收入（取期望 75）
     s1 = {"name": "修炼日支出（3 次）", "color": "#ef4444", "points": cost_pts}
@@ -872,7 +881,8 @@ def build_md(m, sim):
     A("## 6. 修炼体系\n")
     A("| 等级 | 境界 | 战力 | 单次修炼花费 | 3 次/天支出 |")
     A("|---:|---|---:|---:|---:|")
-    for lv in [0, 3, 4, 7, 8, 15, 19, 20, 27, 32, 35]:
+    sample = [0, 3] + list(range(4, MAX_LEVEL, 16)) + [MAX_LEVEL]
+    for lv in sample:
         r = "%s%s" % (m["realms"][lv // 4], m["sub_realms"][lv % 4]) if lv < 36 else "仙人"
         cost = (lv // 4 + 1) * 50
         A("| %d | %s | %d | %d | %d |" % (lv, r, power(lv), cost, cost * 3))
@@ -944,9 +954,9 @@ def export_svgs(m, sim):
 
     # 2) 修炼收支曲线
     s1 = {"name": "修炼日支出（3 次）", "color": "#ef4444",
-          "points": [(l, 3 * ((l // 4 + 1) * 50)) for l in range(36)]}
+          "points": [(l, 3 * ((l // 4 + 1) * 50)) for l in range(MAX_LEVEL + 1)]}
     s2 = {"name": "打工日收入（3 次，期望 75/次）", "color": "#22c55e",
-          "points": [(l, 3 * (75 + 10 * l)) for l in range(36)]}
+          "points": [(l, 3 * (75 + 10 * l)) for l in range(MAX_LEVEL + 1)]}
     svg = render_chart([s1, s2], 0, 35, 0, 1500, w=900, h=340,
                        x_label="境界等级", y_label="金币 / 天", y_fmt="{:,.0f}",
                        embed_legend=True)

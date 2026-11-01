@@ -242,10 +242,18 @@ def scan_module_calls(src):
 
 
 # ---------------------------------------------------------------- 领域知识（数值）
-# 从源码读出的常量，集中在此便于重构时对照
-REALMS = ["炼气", "筑基", "金丹", "元婴", "化神", "炼虚", "合体", "大乘", "渡劫"]
-SUB = ["前期", "中期", "后期", "圆满"]
-MAX_LEVEL = 35
+# 境界数据直接从插件源码 realms.py 导入，避免文档与代码出现第二份真相
+sys.path.insert(0, ROOT)
+try:
+    import realms as _realms
+    REALMS = list(_realms.REALMS)
+    SUB = list(_realms.SUB_REALMS)
+    MAX_LEVEL = _realms.MAX_LEVEL
+except Exception as _e:                      # 文档生成不应因插件损坏而崩溃
+    print("[warn] 无法从 realms.py 读取境界表，回退到内置默认值:", _e)
+    REALMS = ["凡境", "炼体", "凝气", "炼气", "筑基"]
+    SUB = ["前期", "中期", "后期", "圆满"]
+    MAX_LEVEL = len(REALMS) * len(SUB) - 1
 
 ECONOMY = [
     # (名称, 类型, 金额/公式, 触发, 代码位置)
@@ -282,7 +290,7 @@ COMBAT = {
 NEW_FEATURES = [
     ("财富体系", "economy", "既有 3 类入账 + 3 类出账全部内联在各 handler；无统一钱包服务、无流水账、无通胀调控",
      "抽 Wallet 领域服务 + 金币流水表（每笔变动带 reason）"),
-    ("修炼体系和方式", "cultivation", "只有单一 /修炼 线性突破；等级→境界名映射重复硬编码 3 处",
+    ("修炼体系和方式", "cultivation", "境界表已抽到 realms.py（25 大境界 × 4 小境界）；仍只有单一 /修炼 线性突破",
      "抽 Realm 表 + 可插拔功法（CultivationMethod 策略）"),
     ("惩罚机制", "penalty", "冷却/次数/罚款/掉级 4 类惩罚分散在 9 个 handler，各自内联，无法统一调整",
      "抽 PenaltyPolicy：声明式规则表 + 统一结算入口"),

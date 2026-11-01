@@ -9,6 +9,16 @@ from typing import Optional
 from maibot_sdk import MaiBotPlugin, Command, CONFIG_RELOAD_SCOPE_SELF
 
 from .config import PartnerGameConfig
+from .realms import (
+    MAX_LEVEL,
+    REALMS,
+    SUB_REALMS,
+    cultivate_cost,
+    is_major_boundary,
+    is_max_level,
+    power,
+    realm_name,
+)
 from .utils import PersistStore, fetch_avatar_base64, today_str, format_user_display
 
 class PartnerGamePlugin(MaiBotPlugin):
@@ -1020,8 +1030,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         l1 = sender_data["level"]
         l2 = max(husband_data["level"], wife_data["level"])
-        p1 = l1 * (l1 // 4 + 1)
-        p2 = l2 * (l2 // 4 + 1)
+        p1 = power(l1)
+        p2 = power(l2)
         delta_p = p1 - p2
         
         if is_forced:
@@ -1132,8 +1142,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         l1 = sender_data["level"]
         l2 = max(husband_data["level"], wife_data["level"])
-        p1 = l1 * (l1 // 4 + 1)
-        p2 = l2 * (l2 // 4 + 1)
+        p1 = power(l1)
+        p2 = power(l2)
         delta_p = p1 - p2
         
         # Calculate modifiers
@@ -1238,8 +1248,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         l1 = sender_data["level"]
         l2 = target_data["level"]
-        p1 = l1 * (l1 // 4 + 1)
-        p2 = l2 * (l2 // 4 + 1)
+        p1 = power(l1)
+        p2 = power(l2)
         delta_p = p1 - p2
         
         if is_forced:
@@ -1309,8 +1319,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         l1 = sender_data["level"]
         l2 = target_data["level"]
-        p1 = l1 * (l1 // 4 + 1)
-        p2 = l2 * (l2 // 4 + 1)
+        p1 = power(l1)
+        p2 = power(l2)
         delta_p = p1 - p2
         
         delta_bonus = delta_p * 0.005
@@ -1492,12 +1502,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         user_data = self._get_user_data(group_id, sender_qq)
         level = user_data["level"]
         
-        if level >= 35:
-            await self._send_avatar_msg(group_id, "你已达渡劫圆满，此界再无你可修炼之物！", sender_qq, "")
+        if is_max_level(level):
+            await self._send_avatar_msg(group_id, f"你已达【{realm_name(MAX_LEVEL)}】，此界再无你可修炼之物！", sender_qq, "")
             return True, "Max level", 2
             
-        major = level // 4
-        cost = (major + 1) * 50
+        cost = cultivate_cost(level)
         
         if user_data["money"] < cost:
             await self._send_avatar_msg(group_id, f"修炼需要购买丹药，当前境界单次修炼需消耗 {cost} 金币，你的存款不足！", sender_qq, "")
@@ -1509,21 +1518,14 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         user_data["money"] -= cost
         
-        is_major_breakthrough = (level % 4 == 3)
+        is_major_breakthrough = is_major_boundary(level)
         import random
         
-        realms = ["炼气", "筑基", "金丹", "元婴", "化神", "炼虚", "合体", "大乘", "渡劫"]
-        sub_realms = ["前期", "中期", "后期", "圆满"]
-        
-        def get_realm_name(l):
-            if l >= 36: return "仙人"
-            return f"{realms[l//4]}{sub_realms[l%4]}"
-            
         if is_major_breakthrough:
             # 40% success
             if random.random() < 0.4:
                 user_data["level"] += 1
-                msg = f"突破成功！天降祥瑞，你成功迈入了【{get_realm_name(user_data['level'])}】！"
+                msg = f"突破成功！天降祥瑞，你成功迈入了【{realm_name(user_data['level'])}】！"
             else:
                 # Failed, 30% chance drop
                 if random.random() < 0.3 and user_data["level"] > 0:
@@ -1535,7 +1537,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             # 80% success
             if random.random() < 0.8:
                 user_data["level"] += 1
-                msg = f"修炼顺利！你稳扎稳打，达到了【{get_realm_name(user_data['level'])}】。"
+                msg = f"修炼顺利！你稳扎稳打，达到了【{realm_name(user_data['level'])}】。"
             else:
                 msg = "修炼未果。你今日心神不宁，灵气流失，只白白消耗了丹药。"
                 
@@ -1557,12 +1559,10 @@ class PartnerGamePlugin(MaiBotPlugin):
         user_data = self._get_user_data(group_id, sender_qq)
         marriage = self._get_user_marriage(group_id, sender_qq)
         
-        realms = ["炼气", "筑基", "金丹", "元婴", "化神", "炼虚", "合体", "大乘", "渡劫"]
-        sub_realms = ["前期", "中期", "后期", "圆满"]
         level = user_data["level"]
-        realm_name = f"{realms[level//4]}{sub_realms[level%4]}" if level < 36 else "仙人"
+        current_realm = realm_name(level)
         
-        msg = f"【个人状态板】\n境界：{realm_name}\n金币：{user_data['money']}\n"
+        msg = f"【个人状态板】\n境界：{current_realm}\n金币：{user_data['money']}\n"
         
         if marriage:
             rel = "老公" if marriage["role"] == "wife" else "老婆"
@@ -1646,14 +1646,12 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "No data", 2
             
         sorted_users = sorted(users.items(), key=lambda x: x[1].get("level", 0), reverse=True)[:10]
-        realms = ["炼气", "筑基", "金丹", "元婴", "化神", "炼虚", "合体", "大乘", "渡劫"]
-        sub_realms = ["前期", "中期", "后期", "圆满"]
         
         msg = "🏆 【修仙战力榜】 🏆\n"
         for i, (qq, data) in enumerate(sorted_users, 1):
             nick = await self._get_member_nick(group_id, qq)
             l = data.get("level", 0)
-            r_name = f"{realms[l//4]}{sub_realms[l%4]}" if l < 36 else "仙人"
+            r_name = realm_name(l)
             msg += f"{i}. {nick} ({r_name})\n"
             
         await self._send_avatar_msg(group_id, msg.strip(), sender_qq, "")
@@ -1850,8 +1848,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             "📜 【伴侣大乱斗·核心机制说明】 📜\n"
             "---\n"
             "⚔️【修仙战力系统】\n"
-            "• 等级上限：36级（炼气期至渡劫圆满，每4级为一个大境界）。\n"
-            "• 修炼消耗：每日限3次，每次消耗 (当前大境界数 + 1) × 50 金币。\n"
+            f"• 境界体系：{len(REALMS)} 个大境界 × 4 小境界（{'/'.join(SUB_REALMS)}），"
+            f"共 {MAX_LEVEL + 1} 档，从 {REALMS[0]} 到 {REALMS[-1]}。\n"
+            "• 修炼消耗：每日限3次，每次消耗 (当前大境界序号 + 1) × 50 金币。\n"
             "• 修炼突破：小境界突破成功率 80%（失败无惩罚）；大境界突破成功率 40%，且失败时有 30% 概率走火入魔掉落 1 级。\n"
             "• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 20% 概率被反杀掉落 1 级。\n"
             "---\n"

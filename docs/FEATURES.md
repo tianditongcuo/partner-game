@@ -9,7 +9,7 @@
 | 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 24 |
-| plugin.py | 1876 行 |
+| plugin.py | 1875 行 |
 | config.py | 113 行 |
 | utils.py | 113 行 |
 | __init__.py | 2 行 |
@@ -24,10 +24,10 @@
 | **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | — | 0 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
 | **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 7 | 531 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
 | **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 3 | 121 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
-| **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 1 | 66 | `plugin.py:1515, 1560, 1649`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
+| **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 1 | 58 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
 | **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 4 | 395 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
 | **惩罚与限次** | 冷却、每日次数、失败自闭、罚款、掉级 | — | 0 | `plugin.py:376-386`；`plugin.py:343-373`；`plugin.py:388-394` |
-| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 198 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
+| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 195 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
 | **数据与持久化** | JSON 存档、防抖写盘、跨日重置 | — | 0 | `utils.py:50-113`；`utils.py:81-104`；`plugin.py:348-355` |
 | **配置** | 17 个可调参数与管理员/白名单 | — | 0 | `config.py:8-19`；`config.py:24-38`；`config.py:39-48, 94-102` |
 | **管理运维** | 重置、全服补偿、定向发钱 | 3 | 112 | `plugin.py:1728-1732`；`plugin.py:1719-1761`；`plugin.py:1763-1796` |
@@ -71,10 +71,10 @@
 
 | 功能点 | 说明 | 位置 |
 |---|---|---|
-| 等级空间 | 0~35 共 36 档；9 大境界 × 4 小境界，表在 3 处重复硬编码 | `plugin.py:1515, 1560, 1649` |
+| 等级空间 | 0~99 共 100 档；25 大境界 × 4 小境界，已收口到 realms.py 单一数据源 | `realms.py:29-34` |
 | 修炼消耗 | (大境界序号 + 1) × 50 金币，每日 3 次 | `plugin.py:1499-1500` |
 | 突破判定 | 小境界 80% 成功；大境界 40% 成功，失败再 30% 掉 1 级 | `plugin.py:1512-1540` |
-| 战力换算 | power = level × (level//4 + 1)，非线性阶梯 | `plugin.py:1023-1024` |
+| 战力换算 | power = level × (level//4 + 1)，非线性阶梯；4 处调用已统一走 realms.power() | `realms.py:112-115` |
 | 战斗掉级 | 抢老婆失败且 level>0 时 20% 概率掉 1 级 | `plugin.py:1072-1074` |
 
 #### 战斗结算 `combat`
@@ -141,30 +141,30 @@
 
 | 指令 ID | 玩法 | 域 | 起始行 | 行数 | await | 数据表 | 配置项 | 每日次数 |
 |---|---|---|---:|---:|---:|---|---|---|
-| `partner_game` | 今日老婆 | 婚姻关系 | 402 | 136 | 13 | daily_usage、marriages | exclude_self、exclude_sender、forced_wives、persist_enabled、tz_offset_hours | partner_game×1 |
-| `partner_game_divorce` | 离婚 | 婚姻关系 | 543 | 43 | 8 | daily_usage、marriages | persist_enabled、tz_offset_hours | divorce×1 |
-| `proposal_reply` | 求婚应答 | 婚姻关系 | 588 | 71 | 6 | marriages | persist_enabled、proposal_timeout_seconds、tz_offset_hours | — |
-| `marry` | 娶 | 婚姻关系 | 661 | 78 | 11 | marriages | avatar_size、send_avatar | — |
-| `force_marry` | 强娶 | 婚姻关系 | 741 | 96 | 14 | marriages、users | cooldown_seconds、force_marry_probability、persist_enabled、tz_offset_hours | — |
-| `my_partner` | 我的伴侣 | 婚姻关系 | 839 | 49 | 8 | marriages | — | — |
-| `dump_partner` | 甩掉 | 婚姻关系 | 890 | 58 | 10 | daily_usage、marriages | persist_enabled、tz_offset_hours | dump×1 |
-| `rob_wife` | 抢老婆 | 战斗结算 | 950 | 133 | 15 | marriages、users | cooldown_seconds、persist_enabled、rob_wife_probability、tz_offset_hours | — |
-| `rob_chance` | 抢老婆胜率 | 战斗结算 | 1085 | 96 | 7 | marriages、users | rob_wife_probability | — |
-| `rob_money` | 打劫 | 战斗结算 | 1183 | 102 | 13 | daily_usage、marriages、users | no_limit_users、persist_enabled | rob_money×3 |
-| `rob_money_chance` | 打劫胜率 | 战斗结算 | 1287 | 64 | 4 | users | — | — |
-| `partner_game_help` | 帮助 | 展示与输出 | 1353 | 48 | 1 | — | force_marry_probability、rob_wife_probability | — |
-| `work` | 打工 | 经济财富 | 1403 | 27 | 3 | daily_usage、users | persist_enabled | work×3 |
-| `date` | 约会 | 经济财富 | 1432 | 47 | 6 | daily_usage、marriages、users | persist_enabled | date×3 |
-| `cultivate` | 修炼 | 修仙成长 | 1481 | 66 | 5 | daily_usage、users | persist_enabled | cultivate×3 |
-| `status` | 我的状态 | 展示与输出 | 1549 | 34 | 2 | daily_usage、marriages、users | — | — |
+| `partner_game` | 今日老婆 | 婚姻关系 | 412 | 136 | 13 | daily_usage、marriages | exclude_self、exclude_sender、forced_wives、persist_enabled、tz_offset_hours | partner_game×1 |
+| `partner_game_divorce` | 离婚 | 婚姻关系 | 553 | 43 | 8 | daily_usage、marriages | persist_enabled、tz_offset_hours | divorce×1 |
+| `proposal_reply` | 求婚应答 | 婚姻关系 | 598 | 71 | 6 | marriages | persist_enabled、proposal_timeout_seconds、tz_offset_hours | — |
+| `marry` | 娶 | 婚姻关系 | 671 | 78 | 11 | marriages | avatar_size、send_avatar | — |
+| `force_marry` | 强娶 | 婚姻关系 | 751 | 96 | 14 | marriages、users | cooldown_seconds、force_marry_probability、persist_enabled、tz_offset_hours | — |
+| `my_partner` | 我的伴侣 | 婚姻关系 | 849 | 49 | 8 | marriages | — | — |
+| `dump_partner` | 甩掉 | 婚姻关系 | 900 | 58 | 10 | daily_usage、marriages | persist_enabled、tz_offset_hours | dump×1 |
+| `rob_wife` | 抢老婆 | 战斗结算 | 960 | 133 | 15 | marriages、users | cooldown_seconds、persist_enabled、rob_wife_probability、tz_offset_hours | — |
+| `rob_chance` | 抢老婆胜率 | 战斗结算 | 1095 | 96 | 7 | marriages、users | rob_wife_probability | — |
+| `rob_money` | 打劫 | 战斗结算 | 1193 | 102 | 13 | daily_usage、marriages、users | no_limit_users、persist_enabled | rob_money×3 |
+| `rob_money_chance` | 打劫胜率 | 战斗结算 | 1297 | 64 | 4 | users | — | — |
+| `partner_game_help` | 帮助 | 展示与输出 | 1363 | 48 | 1 | — | force_marry_probability、rob_wife_probability | — |
+| `work` | 打工 | 经济财富 | 1413 | 27 | 3 | daily_usage、users | persist_enabled | work×3 |
+| `date` | 约会 | 经济财富 | 1442 | 47 | 6 | daily_usage、marriages、users | persist_enabled | date×3 |
+| `cultivate` | 修炼 | 修仙成长 | 1491 | 58 | 5 | daily_usage、users | persist_enabled | cultivate×3 |
+| `status` | 我的状态 | 展示与输出 | 1551 | 32 | 2 | daily_usage、marriages、users | — | — |
 | `transfer` | 上交存款 | 经济财富 | 1585 | 47 | 6 | marriages、users | persist_enabled | — |
-| `rank_power` | 战力榜 | 展示与输出 | 1634 | 27 | 3 | users | — | — |
-| `rank_money` | 财富榜 | 展示与输出 | 1663 | 22 | 3 | users | — | — |
-| `rank_affection` | 好感榜 | 展示与输出 | 1687 | 31 | 4 | marriages | — | — |
-| `admin_reset` | 重置 | 管理运维 | 1720 | 42 | 5 | daily_usage、marriages | admin_users、persist_enabled | — |
-| `admin_compensate` | 全服补偿 | 管理运维 | 1764 | 33 | 3 | users | admin_users、persist_enabled | — |
-| `admin_give_money` | 发钱/扣钱 | 管理运维 | 1799 | 37 | 5 | users | admin_users、persist_enabled | — |
-| `game_info` | 游戏机制 | 展示与输出 | 1838 | 36 | 1 | — | force_marry_probability、rob_wife_probability | — |
+| `rank_power` | 战力榜 | 展示与输出 | 1634 | 25 | 3 | users | — | — |
+| `rank_money` | 财富榜 | 展示与输出 | 1661 | 22 | 3 | users | — | — |
+| `rank_affection` | 好感榜 | 展示与输出 | 1685 | 31 | 4 | marriages | — | — |
+| `admin_reset` | 重置 | 管理运维 | 1718 | 42 | 5 | daily_usage、marriages | admin_users、persist_enabled | — |
+| `admin_compensate` | 全服补偿 | 管理运维 | 1762 | 33 | 3 | users | admin_users、persist_enabled | — |
+| `admin_give_money` | 发钱/扣钱 | 管理运维 | 1797 | 37 | 5 | users | admin_users、persist_enabled | — |
+| `game_info` | 游戏机制 | 展示与输出 | 1836 | 37 | 1 | — | force_marry_probability、rob_wife_probability | — |
 
 ## 3. 数据模型
 
@@ -221,19 +221,17 @@
 
 | 等级 | 境界 | 战力 | 单次修炼花费 | 3 次/天支出 |
 |---:|---|---:|---:|---:|
-| 0 | 炼气前期 | 0 | 50 | 150 |
-| 3 | 炼气圆满 | 3 | 50 | 150 |
-| 4 | 筑基前期 | 8 | 100 | 300 |
-| 7 | 筑基圆满 | 14 | 100 | 300 |
-| 8 | 金丹前期 | 24 | 150 | 450 |
-| 15 | 元婴圆满 | 60 | 200 | 600 |
-| 19 | 化神圆满 | 95 | 250 | 750 |
-| 20 | 炼虚前期 | 120 | 300 | 900 |
-| 27 | 合体圆满 | 189 | 350 | 1050 |
-| 32 | 渡劫前期 | 288 | 450 | 1350 |
-| 35 | 渡劫圆满 | 315 | 450 | 1350 |
+| 0 | 凡境前期 | 0 | 50 | 150 |
+| 3 | 凡境圆满 | 3 | 50 | 150 |
+| 4 | 炼体前期 | 8 | 100 | 300 |
+| 20 | 凝元前期 | 120 | 300 | 900 |
+| 36 | 仙人 | 360 | 500 | 1500 |
+| 52 | 仙人 | 728 | 700 | 2100 |
+| 68 | 仙人 | 1224 | 900 | 2700 |
+| 84 | 仙人 | 1848 | 1100 | 3300 |
+| 99 | 仙人 | 2475 | 1250 | 3750 |
 
-2 万次蒙特卡洛（每次 3 次/天）：期望 **58 次**修炼、**13,955 金币**、**19 天**练到渡劫圆满；波动区间 37~102 次。
+2 万次蒙特卡洛（每次 3 次/天）：期望 **167 次**修炼、**106,842 金币**、**56 天**练到渡劫圆满；波动区间 124~237 次。
 
 ![修炼收支曲线](charts/cultivation.svg)
 
@@ -257,7 +255,7 @@
 
 ### 修炼体系和方式
 
-- **现状**：只有单一 /修炼 线性突破；等级→境界名映射重复硬编码 3 处
+- **现状**：境界表已抽到 realms.py（25 大境界 × 4 小境界）；仍只有单一 /修炼 线性突破
 - **建议**：抽 Realm 表 + 可插拔功法（CultivationMethod 策略）
 
 ### 惩罚机制
