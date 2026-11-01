@@ -54,9 +54,10 @@ CULTIVATE_LIMIT = 3   # /修炼
 ROB_MONEY_LIMIT = 3   # /打劫
 
 # ============================================================ 打工
-WORK_EARN_MIN = 50        # 基础收入下限
-WORK_EARN_MAX = 100       # 基础收入上限
-WORK_LEVEL_BONUS = 10     # 每级境界的额外收入
+#: 打工收益下限。**允许为负**：负数表示这一趟倒贴（亏本）。
+WORK_EARN_MIN = -100
+#: 打工收益上限 = 当前境界等级 × 本值（等级越高，能赚的越多）
+WORK_EARN_MAX_PER_LEVEL = 1000
 
 # ============================================================ 约会
 DATE_COST = 50            # 每次约会消耗
@@ -115,8 +116,18 @@ REALM_DIVE_DEATH_PROB = 0.05     # 陨落（修为归零、金币保留）
 
 # ============================================================ 罚款与惩罚
 FINE_COMPENSATION_RATIO = 0.5  # 罚款中赔付给对手的比例（其余蒸发）
+#: 罚款下限：无论多穷都至少罚这么多
+FINE_FLOOR = 100
+#: 罚款上限 = 行动者现有金币 × 本值（1.0 = 最多罚光，0.5 = 最多罚一半）
+FINE_CAP_RATIO = 1.0
 FAIL_AUTISM_SECONDS = 60       # 失败后的强制自闭时长（秒）
 MAX_PENALTY_SECONDS = 60       # 自闭时长硬上限
+
+# ============================================================ 交配
+MATING_AFFECTION_MIN = 100     # 允许申请交配所需的最低好感
+MATING_AFFECTION_GAIN = 50     # 每次成功交配提升的好感
+MATING_LIMIT = 3               # 每周期可交配的次数
+MATING_TIMEOUT_SECONDS = 120   # 交配申请的有效期（秒）
 
 
 def affection_shield(affection: int) -> float:

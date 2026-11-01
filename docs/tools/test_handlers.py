@@ -52,6 +52,7 @@ def make_plugin(mod, store, rec):
     p._store = store
     p._last_action = {}
     p.pending_proposals = {}
+    p.pending_mating = {}      # on_load 里初始化，测试里手动补
     p.config = SimpleNamespace(
         plugin=SimpleNamespace(enabled=True),
         partner_game=SimpleNamespace(tz_offset_hours=8, persist_enabled=False,
@@ -200,6 +201,50 @@ async def run(mod, pkg):
         ok &= (r[1] == "Dive done")
         users["u2"]["level"] = 40
         users["u2"]["money"] = 1000
+
+    # ---- 打工：负收益（亏本）----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 1000, "level": 20, "last_allowance": today}
+    with patch.object(random, "randint", return_value=-50):
+        r = await p.handle_work(stream_id="", message={"processed_plain_text": "/打工"})
+    ok &= (users["u1"]["money"] == 950)
+    results.append(("打工亏本", "余额=%s" % users["u1"]["money"], "应 950"))
+
+    # ---- 打工：上限 = 等级 × 系数 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 0, "level": 20, "last_allowance": today}
+    with patch.object(random, "randint", return_value=20000):
+        r = await p.handle_work(stream_id="", message={"processed_plain_text": "/打工"})
+    results.append(("打工上限", "余额=%s" % users["u1"]["money"], "20 级上限 20000"))
+    ok &= (users["u1"]["money"] == 20000)
+
+    # ---- 动态罚款：下限 100，上限 = 现有金币 ----
+    fines = [p._calc_fine(m) for m in (300, 800, 5000) for _ in range(200)]
+    in_range = all(100 <= f <= 5000 for f in fines)
+    results.append(("罚款区间", "min=%d max=%d" % (min(fines), max(fines)), "应落在 100~5000"))
+    ok &= in_range
+
+    # ---- 交配流程 ----
+    reset()
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 100}}
+    users["u1"] = {"money": 1000, "level": 20, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 20, "last_allowance": today}
+    ctx("u1")
+    r1 = await p.handle_mating_request(stream_id="", message={"processed_plain_text": "/申请交配"})
+    pending = (G, "u2") in p.pending_mating
+    ctx("u2")
+    r2 = await p.handle_mating_reply(stream_id="", message={"processed_plain_text": "同意"})
+    aff = store.data["marriages"][G]["u1"]["affection"]
+    ok &= bool(pending) and aff == 150
+    results.append(("交配成功", "好感 %s" % aff, "100 → 150"))
+
+    # ---- 没有待处理申请时，「同意」不应被拦截 ----
+    r3 = await p.handle_mating_reply(stream_id="", message={"processed_plain_text": "同意"})
+    ok &= (r3[0] is False)
+    results.append(("普通「同意」放行", str(r3[1]), "应返回 False 交给 AI"))
 
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)

@@ -58,6 +58,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         self._store = PersistStore(os.path.join(data_dir, "partner_game_seen.json"))
         self._last_action: dict = {}
         self.pending_proposals: dict = {}
+        self.pending_mating: dict = {}      # (群号, 被申请人QQ) → 交配申请
         self._bot_qq_cache: Optional[str] = None
         try:
             self._apply_balance_overrides()   # WebUI 里改过的数值优先于 balance.py
@@ -555,6 +556,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         user = self._get_user_data(group_id, qq)
         return self._loan_overdue(user)
 
+    def _calc_fine(self, payer_money: int) -> int:
+        """按行动者身家算罚款：下限 FINE_FLOOR，上限 现有金币 × FINE_CAP_RATIO。
+
+        默认就是「最少 100，最多把身上钱罚光」。赔给对方的部分由
+        `_settle_fine` 按 FINE_COMPENSATION_RATIO 拆分，其余蒸发。
+        """
+        floor = int(B.FINE_FLOOR)
+        cap = max(floor, int(max(0, payer_money) * B.FINE_CAP_RATIO))
+        return random.randint(floor, cap)
+
     def _settle_fine(self, payer: dict, receiver: dict, fine: int) -> int:
         """罚款结算：从 payer 扣 fine，按比例赔给 receiver，返回赔偿额。
 
@@ -996,7 +1007,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
-            fine = random.randint(B.FORCE_FINE_MIN, B.FORCE_FINE_MAX)
+            fine = self._calc_fine(sender_data["money"])
             target_data = self._get_user_data(group_id, target_qq)
             comp = self._settle_fine(sender_data, target_data, fine)
             
@@ -1228,7 +1239,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
-            fine = random.randint(B.ROB_WIFE_FINE_MIN, B.ROB_WIFE_FINE_MAX)
+            fine = self._calc_fine(sender_data["money"])
             comp = self._settle_fine(sender_data, husband_data, fine)
             
             injury_msg = ""
@@ -1394,7 +1405,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
-            fine = random.randint(B.ROB_MONEY_FINE_MIN, B.ROB_MONEY_FINE_MAX)
+            fine = self._calc_fine(sender_data["money"])
             comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
@@ -1487,6 +1498,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             "15. /还贷：一次性结清债务（不支持分期）。\n"
             "16. /送钱 @某人 <金额>：直接给对方转账。\n"
             "17. /下秘境：赌一把机缘，可能得金币、暴涨、倒退甚至陨落。\n"
+            "【夫妻私房】\n"
+            f"18. /申请交配：好感满 {B.MATING_AFFECTION_MIN} 后向伴侣申请，对方回复「同意」/「拒绝」。\n"
+            f"   每次成功可加 {B.MATING_AFFECTION_GAIN} 好感，每周期上限 {B.MATING_LIMIT} 次。\n"
             "【群排行榜】\n"
             "14. /战力榜：查看本群修仙大能。\n"
             "15. /财富榜：查看本群首富。\n"
@@ -1527,14 +1541,20 @@ class PartnerGamePlugin(MaiBotPlugin):
         import random
         user_data = self._get_user_data(group_id, sender_qq)
         level = user_data.get("level", 0)
-        base_earn = random.randint(B.WORK_EARN_MIN, B.WORK_EARN_MAX)
-        earn = base_earn + (level * B.WORK_LEVEL_BONUS)
+        # 收益区间：下限可配（可为负 = 亏本），上限 = 等级 × 系数
+        lower = int(B.WORK_EARN_MIN)
+        upper = max(lower, int(level * B.WORK_EARN_MAX_PER_LEVEL))
+        earn = random.randint(lower, upper)
         user_data["money"] += earn
         
         if self.config.partner_game.persist_enabled:
             await self._store.save()
             
-        await self._send_avatar_msg(group_id, f"打工成功！凭借 Level {level} 的境界加成，你辛苦赚到了 {earn} 金币，当前余额：{user_data['money']} 金币。", sender_qq, "")
+        if earn >= 0:
+            msg = f"打工成功！凭 Level {level} 的境界，你赚到 {earn} 金币，当前余额 {user_data['money']}。"
+        else:
+            msg = f"这趟活儿干亏了……倒贴 {-earn} 金币（境界 Level {level}），当前余额 {user_data['money']}。"
+        await self._send_avatar_msg(group_id, msg, sender_qq, "")
         return True, "Work done", 2
 
     @Command("date", pattern=r"^\s*(?:/约会|约会)$")
@@ -2182,6 +2202,107 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._store.save()
         await self._send_avatar_msg(group_id, msg, sender_qq, "")
         return True, "Dive done", 2
+
+
+
+    # ---------------- 交配 ----------------
+    @Command("mating_request", pattern=r"^\s*(?:/申请交配|申请交配)$")
+    async def handle_mating_request(self, stream_id: str = "", **kwargs):
+        """向伴侣发起交配申请，需要对方回复「同意」。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        if self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
+        marriage = self._get_user_marriage(group_id, sender_qq)
+        if not marriage:
+            await self._send_avatar_msg(group_id, "你还没有伴侣，交配个寂寞啊……", sender_qq, "")
+            return True, "Single", 2
+
+        affection = marriage.get("affection", 0)
+        need = B.MATING_AFFECTION_MIN
+        if affection < need:
+            await self._send_avatar_msg(
+                group_id,
+                f"你们的感情还不够深（当前好感 {affection}，需要 {need}），先用【/约会】培养一下吧。",
+                sender_qq, "")
+            return True, "Low affection", 2
+
+        if not self._check_daily_limit(group_id, sender_qq, "mating", B.MATING_LIMIT):
+            await self._send_avatar_msg(group_id, "本周期你们已经折腾太多次了，歇一歇吧。", sender_qq, "")
+            return True, "limit", 2
+
+        partner_qq = str(marriage["partner_uid"])
+        husband_qq = sender_qq if marriage["role"] == "husband" else partner_qq
+        self.pending_mating[(group_id, partner_qq)] = {
+            "proposer": sender_qq,
+            "partner": partner_qq,
+            "husband_qq": husband_qq,          # 好感记在老公那条记录上
+            "group_id": group_id,
+            "timestamp": time.time(),
+        }
+
+        nick = await self._get_member_nick(group_id, partner_qq)
+        await self._send_avatar_msg(
+            group_id,
+            f"【{sender_qq}】向伴侣【{nick}({partner_qq})】发起了交配申请……\n"
+            f"请对方在 {B.MATING_TIMEOUT_SECONDS} 秒内回复「同意」或「拒绝」。",
+            sender_qq, partner_qq)
+        return True, "Mating requested", 2
+
+    @Command("mating_reply", pattern=r"^\s*(?:/)?(?:我)?(?:同意|拒绝)\s*$")
+    async def handle_mating_reply(self, stream_id: str = "", **kwargs):
+        """处理交配申请：只在存在待处理申请时才接管消息，否则放行给 AI。"""
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return False, "Not in group", 0
+
+        key = (group_id, sender_qq)
+        req = self.pending_mating.get(key)
+        if not req:
+            return False, "No pending mating", 0      # 普通聊天里的「同意」不拦截
+
+        if time.time() - req["timestamp"] > B.MATING_TIMEOUT_SECONDS:
+            del self.pending_mating[key]
+            await self._send_avatar_msg(group_id, "交配申请已经超时作废了。", sender_qq, "")
+            return True, "Timeout", 2
+
+        text = self._message_text(kwargs)
+        if "拒绝" in text:
+            del self.pending_mating[key]
+            await self._send_avatar_msg(group_id, "对方拒绝了你的交配申请……", req["proposer"], sender_qq)
+            return True, "Rejected", 2
+
+        # 同意：先确认关系还在（可能刚被抢/离婚）
+        marriage = self._get_user_marriage(group_id, req["proposer"])
+        if not marriage or str(marriage.get("partner_uid")) != str(sender_qq):
+            del self.pending_mating[key]
+            await self._send_avatar_msg(group_id, "你们已经不是伴侣了，申请作废。", sender_qq, "")
+            return True, "No longer partners", 2
+
+        del self.pending_mating[key]
+
+        marriages = self._store.data.setdefault("marriages", {}).setdefault(group_id, {})
+        rec = marriages.get(req["husband_qq"])
+        if rec is not None:
+            rec["affection"] = rec.get("affection", 0) + B.MATING_AFFECTION_GAIN
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        total = rec.get("affection", 0) if rec else B.MATING_AFFECTION_GAIN
+        await self._send_avatar_msg(
+            group_id,
+            f"两情相悦，缠绵一场~\n好感度 +{B.MATING_AFFECTION_GAIN}，当前总好感 {total}。",
+            sender_qq, req["proposer"])
+        return True, "Mating accepted", 2
 
 
 def create_plugin():

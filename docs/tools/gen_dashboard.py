@@ -742,9 +742,10 @@ BALANCE_META = [
     ("次数", "DATE_LIMIT", "/约会 每周期次数"),
     ("次数", "CULTIVATE_LIMIT", "/修炼 每周期次数"),
     ("次数", "ROB_MONEY_LIMIT", "/打劫 每周期次数"),
+    ("次数", "MATING_LIMIT", "交配每周期次数"),
     ("打工", "WORK_EARN_MIN", "基础收入下限"),
-    ("打工", "WORK_EARN_MAX", "基础收入上限"),
-    ("打工", "WORK_LEVEL_BONUS", "每级境界的额外收入"),
+    ("打工", "WORK_EARN_MAX_PER_LEVEL", "收益上限系数（×等级）"),
+    
     ("约会", "DATE_COST", "每次约会消耗金币"),
     ("约会", "DATE_AFF_MIN", "好感增加下限"),
     ("约会", "DATE_AFF_MAX", "好感增加上限"),
@@ -755,27 +756,33 @@ BALANCE_META = [
     ("好感", "AFFECTION_PER_SHIELD", "每多少点好感抵消一档胜率"),
     ("好感", "AFFECTION_SHIELD_RATE", "每档抵消的胜率"),
     ("强娶", "FORCE_GATE", "发起所需金币门槛"),
-    ("强娶", "FORCE_FINE_MIN", "失败罚款下限"),
-    ("强娶", "FORCE_FINE_MAX", "失败罚款上限"),
+    
+    
     ("强娶", "FORCE_FLOOR", "胜率钳制下限（强娶不参与战力）"),
     ("强娶", "FORCE_CAP", "胜率钳制上限"),
     ("抢老婆", "ROB_WIFE_GATE", "发起所需金币门槛"),
-    ("抢老婆", "ROB_WIFE_FINE_MIN", "失败罚款下限"),
-    ("抢老婆", "ROB_WIFE_FINE_MAX", "失败罚款上限"),
+    
+    
     ("抢老婆", "ROB_WIFE_DROP_CHANCE", "失败后被反杀掉级的概率"),
     ("打劫", "ROB_MONEY_GATE", "发起所需金币门槛"),
-    ("打劫", "ROB_MONEY_FINE_MIN", "失败罚款下限"),
-    ("打劫", "ROB_MONEY_FINE_MAX", "失败罚款上限"),
-    ("打劫", "ROB_MONEY_POOR_PROTECT", "目标资产低于此值不可被打劫"),
+    
+    
+    
     ("打劫", "ROB_MONEY_RATIO_MIN", "抢走目标资产的比例下限"),
     ("打劫", "ROB_MONEY_RATIO_MAX", "抢走目标资产的比例上限"),
     ("打劫", "ROB_MONEY_STEAL_MIN", "单次劫掠金额下限"),
     ("打劫", "ROB_MONEY_STEAL_CAP", "单次劫掠金额上限"),
     ("共用", "ROB_FLOOR", "抢夺/打劫的胜率钳制下限"),
     ("共用", "ROB_CAP", "抢夺/打劫的胜率钳制上限"),
+    ("共用", "FINE_FLOOR", "罚款下限"),
+    ("共用", "FINE_CAP_RATIO", "罚款上限 = 现有金币 × 本值"),
     ("共用", "FINE_COMPENSATION_RATIO", "罚款中赔付给对手的比例（其余蒸发）"),
     ("共用", "FAIL_AUTISM_SECONDS", "失败后的强制自闭时长（秒）"),
     ("共用", "MAX_PENALTY_SECONDS", "自闭时长硬上限（秒）"),
+    ("交配", "MATING_AFFECTION_MIN", "申请交配所需好感"),
+    ("交配", "MATING_AFFECTION_GAIN", "每次交配好感增益"),
+    ("交配", "MATING_LIMIT", "每周期交配次数"),
+    ("交配", "MATING_TIMEOUT_SECONDS", "申请有效期（秒）"),
 ]
 
 
