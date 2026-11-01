@@ -26,9 +26,11 @@ DOCS = os.path.join(ROOT, "docs")
 sys.path.insert(0, ROOT)
 try:
     import realms as R
+    import balance as B
     MAX_LEVEL = R.MAX_LEVEL
 except Exception:                            # 插件损坏时不影响文档渲染
     R = None
+    B = None
     MAX_LEVEL = 35
 
 # 指令中文名（人工映射，比 pattern 好读）
@@ -727,6 +729,222 @@ function filterRows(){
 """
 
 
+# ============================================================ 数值总览
+BALANCE_META = [
+    ("周期", "CYCLE_HOURS", "一个周期的时长（小时）。改这里 = 所有次数限制、低保、跨周期好感的节奏一起变"),
+    ("经济", "INITIAL_MONEY", "新用户初始金币"),
+    ("经济", "CYCLE_ALLOWANCE", "每周期首次互动发放的低保"),
+    ("经济", "MARRIAGE_AFFECTION_PER_CYCLE", "跨周期时，存续中的婚姻自动增加的好感"),
+    ("次数", "DRAW_LIMIT", "/今日老婆 每周期次数"),
+    ("次数", "DIVORCE_LIMIT", "/离婚 每周期次数"),
+    ("次数", "DUMP_LIMIT", "/甩掉 每周期次数"),
+    ("次数", "WORK_LIMIT", "/打工 每周期次数"),
+    ("次数", "DATE_LIMIT", "/约会 每周期次数"),
+    ("次数", "CULTIVATE_LIMIT", "/修炼 每周期次数"),
+    ("次数", "ROB_MONEY_LIMIT", "/打劫 每周期次数"),
+    ("打工", "WORK_EARN_MIN", "基础收入下限"),
+    ("打工", "WORK_EARN_MAX", "基础收入上限"),
+    ("打工", "WORK_LEVEL_BONUS", "每级境界的额外收入"),
+    ("约会", "DATE_COST", "每次约会消耗金币"),
+    ("约会", "DATE_AFF_MIN", "好感增加下限"),
+    ("约会", "DATE_AFF_MAX", "好感增加上限"),
+    ("修炼", "CULTIVATE_COST_BASE", "费用系数：(大境界序号+1) × 本值"),
+    ("修炼", "MINOR_SUCCESS_RATE", "小境界突破成功率"),
+    ("修炼", "MAJOR_SUCCESS_RATE", "大境界突破成功率"),
+    ("修炼", "MAJOR_FAIL_DROP_RATE", "大境界失败后走火入魔（掉 1 级）的概率"),
+    ("好感", "AFFECTION_PER_SHIELD", "每多少点好感抵消一档胜率"),
+    ("好感", "AFFECTION_SHIELD_RATE", "每档抵消的胜率"),
+    ("强娶", "FORCE_GATE", "发起所需金币门槛"),
+    ("强娶", "FORCE_FINE_MIN", "失败罚款下限"),
+    ("强娶", "FORCE_FINE_MAX", "失败罚款上限"),
+    ("强娶", "FORCE_FLOOR", "胜率钳制下限（强娶不参与战力）"),
+    ("强娶", "FORCE_CAP", "胜率钳制上限"),
+    ("抢老婆", "ROB_WIFE_GATE", "发起所需金币门槛"),
+    ("抢老婆", "ROB_WIFE_FINE_MIN", "失败罚款下限"),
+    ("抢老婆", "ROB_WIFE_FINE_MAX", "失败罚款上限"),
+    ("抢老婆", "ROB_WIFE_DROP_CHANCE", "失败后被反杀掉级的概率"),
+    ("打劫", "ROB_MONEY_GATE", "发起所需金币门槛"),
+    ("打劫", "ROB_MONEY_FINE_MIN", "失败罚款下限"),
+    ("打劫", "ROB_MONEY_FINE_MAX", "失败罚款上限"),
+    ("打劫", "ROB_MONEY_POOR_PROTECT", "目标资产低于此值不可被打劫"),
+    ("打劫", "ROB_MONEY_RATIO_MIN", "抢走目标资产的比例下限"),
+    ("打劫", "ROB_MONEY_RATIO_MAX", "抢走目标资产的比例上限"),
+    ("打劫", "ROB_MONEY_STEAL_MIN", "单次劫掠金额下限"),
+    ("打劫", "ROB_MONEY_STEAL_CAP", "单次劫掠金额上限"),
+    ("共用", "ROB_FLOOR", "抢夺/打劫的胜率钳制下限"),
+    ("共用", "ROB_CAP", "抢夺/打劫的胜率钳制上限"),
+    ("共用", "FINE_COMPENSATION_RATIO", "罚款中赔付给对手的比例（其余蒸发）"),
+    ("共用", "FAIL_AUTISM_SECONDS", "失败后的强制自闭时长（秒）"),
+    ("共用", "MAX_PENALTY_SECONDS", "自闭时长硬上限（秒）"),
+]
+
+
+def _fmt_value(v):
+    if isinstance(v, bool):
+        return "开" if v else "关"
+    if isinstance(v, float):
+        if 0 < abs(v) <= 1:
+            return "%s（%s%%）" % (v, ("%.4g" % (v * 100)))
+        return str(v)
+    return str(v)
+
+
+def section_balance(m):
+    if not B:
+        return "<p>未能导入 balance.py</p>"
+    rows = []
+    last_group = None
+    for group, name, desc in BALANCE_META:
+        if not hasattr(B, name):
+            continue
+        val = getattr(B, name)
+        g = '<b style="color:#e2e8f0">%s</b>' % esc(group) if group != last_group else ""
+        last_group = group
+        rows.append(
+            "<tr><td>%s</td><td><code>%s</code></td><td class=\"num\">%s</td><td>%s</td></tr>"
+            % (g, esc(name), esc(_fmt_value(val)), esc(desc)))
+    head = "<tr><th>分组</th><th>常量</th><th>当前值</th><th>说明</th></tr>"
+    cycle_hint = ""
+    if B:
+        cycle_hint = ('<div class="callout"><b>周期时长</b>：当前 <code>CYCLE_HOURS = %s</code> 小时。'
+                      '改成 12 就是半天一轮、168 就是一周一轮；所有「每周期次数」、低保、'
+                      '跨周期好感都自动跟随，无需改别处。</div>' % B.CYCLE_HOURS)
+    return ('<div class="table-wrap"><table class="tbl">%s<tbody>%s</tbody></table></div>%s'
+            % (head, "".join(rows), cycle_hint))
+
+
+# ============================================================ 概率热力图
+def _prob(kind, atk, dfd, affection=0, base=0.0):
+    p = base
+    if kind != "force":
+        p += (R.power(atk) - R.power(dfd)) * R.POWER_RATE_PER_POINT
+        p -= B.affection_shield(affection)
+    if kind == "force":
+        return max(B.FORCE_FLOOR, min(B.FORCE_CAP, p))
+    return max(B.ROB_FLOOR, min(B.ROB_CAP, p))
+
+
+def heatmap_svg(matrix, row_labels, col_labels, title, w=880, h=460):
+    """matrix[row][col]，行=防守方起点，列=进攻方。"""
+    n_r, n_c = len(matrix), len(matrix[0])
+    ml, mr, mt, mb = 96, 18, 34, 52
+    pw, ph = w - ml - mr, h - mt - mb
+    cw, ch = pw / float(n_c), ph / float(n_r)
+    out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" class="chart" role="img">' % (w, h)]
+    out.append('<rect width="100%" height="100%" fill="#0f172a" rx="10"/>')
+    out.append('<text x="%d" y="20" class="bxs" text-anchor="middle">%s</text>' % (ml + pw // 2, esc(title)))
+    for r in range(n_r):
+        for c in range(n_c):
+            v = matrix[r][c]
+            hue = int(0 + 140 * v)
+            out.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="hsl(%d,62%%,%d%%)" opacity="0.92"/>'
+                       % (ml + c * cw, mt + r * ch, cw + 0.5, ch + 0.5, hue, 38 + int(14 * (1 - v))))
+    # 坐标轴刻度
+    for c in range(0, n_c, max(1, n_c // 10)):
+        out.append('<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
+                   % (ml + c * cw + cw / 2, mt + ph + 16, esc(col_labels[c])))
+    for r in range(0, n_r, max(1, n_r // 10)):
+        out.append('<text x="%d" y="%.1f" class="axis" text-anchor="end">%s</text>'
+                   % (ml - 8, mt + r * ch + ch / 2 + 4, esc(row_labels[r])))
+    out.append('<text x="%d" y="%d" class="axis">进攻方境界 →</text>' % (ml, h - 12))
+    out.append('<text x="%d" y="%d" class="axis">↑ 防守方境界</text>' % (6, mt - 8))
+    out.append("</svg>")
+    return "".join(out)
+
+
+def _grid(kind, base, affection=0, step=5):
+    levels = list(range(0, MAX_LEVEL + 1, step))
+    if levels[-1] != MAX_LEVEL:
+        levels.append(MAX_LEVEL)
+    matrix = []
+    for d in levels:
+        row = []
+        for a in levels:
+            row.append(_prob(kind, a, d, affection, base))
+        matrix.append(row)
+    labels = [(R.realm_name(l) if R else str(l)) for l in levels]
+    short = [n[:2] for n in labels]
+    return levels, matrix, short
+
+
+def section_probability_grid(m):
+    if not (R and B):
+        return "<p>缺少 realms/balance，无法绘制</p>"
+    cfg = {c["name"]: c["default"] for c in m["config"]}
+    p_force = float(cfg.get("force_marry_probability") or 0.4)
+    p_wife = float(cfg.get("rob_wife_probability") or 0.3)
+    p_money = float(cfg.get("rob_money_probability") or 0.35)
+
+    lv, g1, g2, g3, g4 = [], [], [], [], []
+    lv, g1, lab = _grid("force", p_force)
+    _, g2, _ = _grid("rob_wife", p_wife, 0)
+    _, g3, _ = _grid("rob_wife", p_wife, 200)
+    _, g4, _ = _grid("rob_money", p_money, 0)
+
+    html = ['<div class="grid-2">']
+    html.append('<div>' + heatmap_svg(g1, lab, lab, "强娶成功率（%.0f%% 基础，不参与战力）" % (p_force * 100)) + '</div>')
+    html.append('<div>' + heatmap_svg(g2, lab, lab, "抢老婆成功率（好感 0）") + '</div>')
+    html.append('<div>' + heatmap_svg(g3, lab, lab, "抢老婆成功率（好感 200，护盾 −10%）") + '</div>')
+    html.append('<div>' + heatmap_svg(g4, lab, lab, "打劫成功率（无好感护盾）") + '</div>')
+    html.append('</div>')
+    html.append('<p class="note">颜色由红（低胜率）到绿（高胜率）。注意强娶那张是<b>纯色</b>——'
+                '它不参与战力计算，所以任何等级对任何人都是同一个概率；'
+                '其余三张的对角线是"同境界 ≈ 基础概率"，越远离对角线越快撞上钳制边界。</p>')
+
+    # 好感护盾曲线
+    affs = list(range(0, 1001, 50))
+    series = []
+    mid = 60  # 取中段作为基准，攻击/防守各偏移一个大境界
+    for gap, color, label in ((4, "#22c55e", "进攻方高 1 个大境界"),
+                              (0, "#eab308", "双方同境界"),
+                              (-4, "#ef4444", "进攻方低 1 个大境界")):
+        pts = []
+        for aff in affs:
+            lvl_a = min(MAX_LEVEL, max(0, mid + gap))
+            pts.append((aff, _prob("rob_wife", lvl_a, mid, aff, p_wife)))
+        series.append({"name": label, "color": color, "points": pts})
+    html.append(line_chart(series, 0, 1000, 0, 1, w=880, h=300,
+                           x_label="夫妻好感度", y_label="抢老婆成功率", y_fmt="{:.0%}", x_fmt="{:.0f}"))
+    html.append('<p class="note">好感护盾是<b>线性递减</b>但被 10%% 兜底卡住：'
+                '每 %d 点好感减 %s，理论上 1000 好感可减 %.0f%%，'
+                '但底部保底 %s%% 让它最多只能把优势方压回下限。</p>'
+                % (B.AFFECTION_PER_SHIELD, B.AFFECTION_SHIELD_RATE,
+                   B.affection_shield(1000) * 100, B.ROB_FLOOR * 100))
+    return "".join(html)
+
+
+# ============================================================ 周期与次数
+def section_cycle(m):
+    if not B:
+        return "<p>缺少 balance.py</p>"
+    actions = [
+        ("/今日老婆", B.DRAW_LIMIT, "#ec4899"),
+        ("/离婚", B.DIVORCE_LIMIT, "#ec4899"),
+        ("/甩掉", B.DUMP_LIMIT, "#ec4899"),
+        ("/打工", B.WORK_LIMIT, "#f59e0b"),
+        ("/约会", B.DATE_LIMIT, "#f59e0b"),
+        ("/修炼", B.CULTIVATE_LIMIT, "#10b981"),
+        ("/打劫", B.ROB_MONEY_LIMIT, "#ef4444"),
+    ]
+    maxv = max(a[1] for a in actions) or 1
+    bars = []
+    for name, v, color in actions:
+        bars.append(
+            '<div class="bar-row"><span class="bar-label">%s</span>'
+            '<span class="bar-track"><span class="bar-fill" style="width:%.1f%%;background:%s"></span></span>'
+            '<span class="bar-value">%d 次</span></div>'
+            % (esc(name), v / float(maxv) * 100, color, v))
+    return ('<div class="stats"><div class="stat"><span class="sv">%s 小时</span>'
+            '<span class="sl">一个周期（CYCLE_HOURS）</span></div>'
+            '<div class="stat"><span class="sv">%d</span><span class="sl">受周期影响的指令数</span></div>'
+            '<div class="stat"><span class="sv">%d</span><span class="sl">每周期可执行的总次数上限</span></div>'
+            '</div>' % (B.CYCLE_HOURS, len(actions), sum(a[1] for a in actions))
+            + '<div class="bars" style="margin-top:18px">' + "".join(bars) + '</div>'
+            + '<p class="note">次数记录存在 <code>daily_usage</code>，跨周期时整体清空。'
+              '当前周期标识由 <code>balance.period_key()</code> 生成：'
+              '周期为 24 小时时沿用日期字符串（与旧存档兼容），其它周期用 <code>P序号</code>。</p>')
+
+
 def build_html(m, sim):
     st = domain_stats(m)
     total_loc = m["meta"]["plugin_py_loc"]
@@ -742,6 +960,9 @@ def build_html(m, sim):
         ("s-hot", "⑨ 维护热点"),
         ("s-new", "⑩ 新功能落点"),
         ("s-cfg", "⑪ 配置项"),
+        ("s-bal", "⑫ 数值总览"),
+        ("s-grid", "⑬ 概率矩阵"),
+        ("s-cycle", "⑭ 周期次数"),
     ]
     nav = "".join('<button data-target="%s"%s>%s</button>'
                   % (t[0], ' class="on"' if i == 0 else "", esc(t[1])) for i, t in enumerate(tabs))
@@ -793,6 +1014,15 @@ def build_html(m, sim):
         sec("s-cfg", "配置项清单",
             "17 个配置项及其被读取的次数；次数为 0 说明是死配置或只在模块外使用。",
             section_config(m)),
+        sec("s-bal", "数值总览（balance.py）",
+            "所有可调数值集中在此；改 balance.py 一处，插件、面板、曲线同时生效。",
+            section_balance(m)),
+        sec("s-grid", "成功率矩阵",
+            "按等级网格算出的真实胜率，直接看概率面长什么样。",
+            section_probability_grid(m)),
+        sec("s-cycle", "周期与次数",
+            "每个周期各行为可用次数；周期时长由 CYCLE_HOURS 单点控制。",
+            section_cycle(m)),
     ])
 
     title = esc(m["meta"]["plugin"]) + " · 维护地图"

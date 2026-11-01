@@ -4,12 +4,12 @@
     "id": "tianditongcuo.partner-game-pro",
     "version": "2.0.2",
     "files": {
-      "plugin.py": 1877,
+      "plugin.py": 1884,
       "config.py": 113,
       "utils.py": 113,
       "__init__.py": 2
     },
-    "plugin_py_loc": 1877,
+    "plugin_py_loc": 1884,
     "commands": 24,
     "config_fields": 17,
     "domains": {
@@ -72,10 +72,10 @@
       "pattern": "^\\s*(?:/今日老婆|今日老婆|/抽老婆|抽老婆|/老婆|老婆)$",
       "description": "随机抽取今日老婆",
       "aliases": [],
-      "lineno": 409,
-      "decorator_lineno": 409,
-      "code_lineno": 414,
-      "end_lineno": 549,
+      "lineno": 407,
+      "decorator_lineno": 407,
+      "code_lineno": 412,
+      "end_lineno": 547,
       "loc": 136,
       "awaits": 13,
       "api_calls": [
@@ -99,12 +99,7 @@
         "daily_usage",
         "marriages"
       ],
-      "daily_limits": [
-        [
-          "partner_game",
-          1
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [
         "partner_game"
       ],
@@ -119,10 +114,10 @@
       "pattern": "^\\s*(?:/离婚|离婚)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "清空今日老婆记录，可重新抽取（每日限一次）",
       "aliases": [],
-      "lineno": 550,
-      "decorator_lineno": 550,
-      "code_lineno": 555,
-      "end_lineno": 597,
+      "lineno": 548,
+      "decorator_lineno": 548,
+      "code_lineno": 553,
+      "end_lineno": 595,
       "loc": 43,
       "awaits": 8,
       "api_calls": [],
@@ -141,12 +136,7 @@
         "daily_usage",
         "marriages"
       ],
-      "daily_limits": [
-        [
-          "divorce",
-          1
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [
         "divorce"
       ],
@@ -161,10 +151,10 @@
       "pattern": ".*(?:我同意|我拒绝).*",
       "description": "",
       "aliases": [],
-      "lineno": 599,
-      "decorator_lineno": 599,
-      "code_lineno": 600,
-      "end_lineno": 670,
+      "lineno": 597,
+      "decorator_lineno": 597,
+      "code_lineno": 598,
+      "end_lineno": 668,
       "loc": 71,
       "awaits": 6,
       "api_calls": [],
@@ -195,10 +185,10 @@
       "pattern": "^\\s*(?:/娶|娶)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 672,
-      "decorator_lineno": 672,
-      "code_lineno": 673,
-      "end_lineno": 750,
+      "lineno": 670,
+      "decorator_lineno": 670,
+      "code_lineno": 671,
+      "end_lineno": 748,
       "loc": 78,
       "awaits": 11,
       "api_calls": [],
@@ -228,11 +218,11 @@
       "pattern": "^\\s*(?:/强娶|强娶)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 752,
-      "decorator_lineno": 752,
-      "code_lineno": 753,
-      "end_lineno": 848,
-      "loc": 96,
+      "lineno": 750,
+      "decorator_lineno": 750,
+      "code_lineno": 751,
+      "end_lineno": 845,
+      "loc": 95,
       "awaits": 14,
       "api_calls": [],
       "config_keys": [
@@ -256,12 +246,7 @@
       "cooldowns": [
         "force_marry"
       ],
-      "penalties": [
-        [
-          "force_marry",
-          60
-        ]
-      ],
+      "penalties": [],
       "mutates_money": true,
       "mutates_level": false,
       "domain": "marriage"
@@ -272,10 +257,10 @@
       "pattern": "^\\s*(?:/我的伴侣|我的伴侣)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 850,
-      "decorator_lineno": 850,
-      "code_lineno": 851,
-      "end_lineno": 899,
+      "lineno": 847,
+      "decorator_lineno": 847,
+      "code_lineno": 848,
+      "end_lineno": 896,
       "loc": 49,
       "awaits": 8,
       "api_calls": [],
@@ -302,11 +287,11 @@
       "pattern": "^\\s*(?:/甩掉|甩掉)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 901,
-      "decorator_lineno": 901,
-      "code_lineno": 902,
-      "end_lineno": 959,
-      "loc": 58,
+      "lineno": 898,
+      "decorator_lineno": 898,
+      "code_lineno": 899,
+      "end_lineno": 955,
+      "loc": 57,
       "awaits": 10,
       "api_calls": [],
       "config_keys": [
@@ -324,12 +309,7 @@
         "daily_usage",
         "marriages"
       ],
-      "daily_limits": [
-        [
-          "dump",
-          1
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [
         "dump_partner"
       ],
@@ -344,11 +324,11 @@
       "pattern": "^\\s*(?:/抢老婆|抢老婆)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 961,
-      "decorator_lineno": 961,
-      "code_lineno": 962,
-      "end_lineno": 1094,
-      "loc": 133,
+      "lineno": 957,
+      "decorator_lineno": 957,
+      "code_lineno": 958,
+      "end_lineno": 1089,
+      "loc": 132,
       "awaits": 15,
       "api_calls": [],
       "config_keys": [
@@ -372,12 +352,7 @@
       "cooldowns": [
         "rob_wife"
       ],
-      "penalties": [
-        [
-          "rob_wife",
-          60
-        ]
-      ],
+      "penalties": [],
       "mutates_money": true,
       "mutates_level": false,
       "domain": "combat"
@@ -388,10 +363,10 @@
       "pattern": "^\\s*(?:/抢老婆胜率|/抢夺胜率|抢老婆胜率|抢夺胜率|/抢老婆概率|/抢夺概率|抢老婆概率|抢夺概率).*",
       "description": "",
       "aliases": [],
-      "lineno": 1096,
-      "decorator_lineno": 1096,
-      "code_lineno": 1097,
-      "end_lineno": 1192,
+      "lineno": 1091,
+      "decorator_lineno": 1091,
+      "code_lineno": 1092,
+      "end_lineno": 1187,
       "loc": 96,
       "awaits": 7,
       "api_calls": [],
@@ -420,10 +395,10 @@
       "pattern": "^\\s*(?:/打劫|打劫)(?:\\s+|\\[CQ:at|@|\\d|$).*",
       "description": "",
       "aliases": [],
-      "lineno": 1194,
-      "decorator_lineno": 1194,
-      "code_lineno": 1195,
-      "end_lineno": 1296,
+      "lineno": 1189,
+      "decorator_lineno": 1189,
+      "code_lineno": 1190,
+      "end_lineno": 1291,
       "loc": 102,
       "awaits": 13,
       "api_calls": [],
@@ -442,21 +417,11 @@
         "marriages",
         "users"
       ],
-      "daily_limits": [
-        [
-          "rob_money",
-          3
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [
         "rob_money"
       ],
-      "penalties": [
-        [
-          "rob_money",
-          60
-        ]
-      ],
+      "penalties": [],
       "mutates_money": true,
       "mutates_level": false,
       "domain": "combat"
@@ -467,10 +432,10 @@
       "pattern": "^\\s*(?:/打劫胜率|/打劫概率|打劫胜率|打劫概率).*",
       "description": "",
       "aliases": [],
-      "lineno": 1298,
-      "decorator_lineno": 1298,
-      "code_lineno": 1299,
-      "end_lineno": 1362,
+      "lineno": 1293,
+      "decorator_lineno": 1293,
+      "code_lineno": 1294,
+      "end_lineno": 1357,
       "loc": 64,
       "awaits": 4,
       "api_calls": [],
@@ -498,10 +463,10 @@
         "/今日老婆帮助",
         "/抽老婆帮助"
       ],
-      "lineno": 1364,
-      "decorator_lineno": 1364,
-      "code_lineno": 1365,
-      "end_lineno": 1412,
+      "lineno": 1359,
+      "decorator_lineno": 1359,
+      "code_lineno": 1360,
+      "end_lineno": 1407,
       "loc": 48,
       "awaits": 1,
       "api_calls": [],
@@ -525,10 +490,10 @@
       "pattern": "^\\s*(?:/打工|打工)$",
       "description": "",
       "aliases": [],
-      "lineno": 1414,
-      "decorator_lineno": 1414,
-      "code_lineno": 1415,
-      "end_lineno": 1441,
+      "lineno": 1409,
+      "decorator_lineno": 1409,
+      "code_lineno": 1410,
+      "end_lineno": 1436,
       "loc": 27,
       "awaits": 3,
       "api_calls": [],
@@ -544,12 +509,7 @@
         "daily_usage",
         "users"
       ],
-      "daily_limits": [
-        [
-          "work",
-          3
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [],
       "penalties": [],
       "mutates_money": true,
@@ -562,10 +522,10 @@
       "pattern": "^\\s*(?:/约会|约会)$",
       "description": "",
       "aliases": [],
-      "lineno": 1443,
-      "decorator_lineno": 1443,
-      "code_lineno": 1444,
-      "end_lineno": 1490,
+      "lineno": 1438,
+      "decorator_lineno": 1438,
+      "code_lineno": 1439,
+      "end_lineno": 1485,
       "loc": 47,
       "awaits": 6,
       "api_calls": [],
@@ -585,12 +545,7 @@
         "marriages",
         "users"
       ],
-      "daily_limits": [
-        [
-          "date",
-          3
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [],
       "penalties": [],
       "mutates_money": false,
@@ -603,10 +558,10 @@
       "pattern": "^\\s*(?:/修炼|修炼)$",
       "description": "",
       "aliases": [],
-      "lineno": 1492,
-      "decorator_lineno": 1492,
-      "code_lineno": 1493,
-      "end_lineno": 1550,
+      "lineno": 1487,
+      "decorator_lineno": 1487,
+      "code_lineno": 1488,
+      "end_lineno": 1545,
       "loc": 58,
       "awaits": 5,
       "api_calls": [],
@@ -622,12 +577,7 @@
         "daily_usage",
         "users"
       ],
-      "daily_limits": [
-        [
-          "cultivate",
-          3
-        ]
-      ],
+      "daily_limits": [],
       "cooldowns": [],
       "penalties": [],
       "mutates_money": false,
@@ -640,10 +590,10 @@
       "pattern": "^\\s*(?:/我的状态|我的状态)$",
       "description": "",
       "aliases": [],
-      "lineno": 1552,
-      "decorator_lineno": 1552,
-      "code_lineno": 1553,
-      "end_lineno": 1584,
+      "lineno": 1547,
+      "decorator_lineno": 1547,
+      "code_lineno": 1548,
+      "end_lineno": 1579,
       "loc": 32,
       "awaits": 2,
       "api_calls": [],
@@ -674,10 +624,10 @@
       "pattern": "^\\s*(?:/上交存款|上交存款)\\s+(\\d+)$",
       "description": "",
       "aliases": [],
-      "lineno": 1586,
-      "decorator_lineno": 1586,
-      "code_lineno": 1587,
-      "end_lineno": 1633,
+      "lineno": 1581,
+      "decorator_lineno": 1581,
+      "code_lineno": 1582,
+      "end_lineno": 1628,
       "loc": 47,
       "awaits": 6,
       "api_calls": [],
@@ -706,10 +656,10 @@
       "pattern": "^\\s*(?:/战力榜|战力榜)$",
       "description": "",
       "aliases": [],
-      "lineno": 1635,
-      "decorator_lineno": 1635,
-      "code_lineno": 1636,
-      "end_lineno": 1660,
+      "lineno": 1630,
+      "decorator_lineno": 1630,
+      "code_lineno": 1631,
+      "end_lineno": 1655,
       "loc": 25,
       "awaits": 3,
       "api_calls": [],
@@ -734,10 +684,10 @@
       "pattern": "^\\s*(?:/财富榜|财富榜)$",
       "description": "",
       "aliases": [],
-      "lineno": 1662,
-      "decorator_lineno": 1662,
-      "code_lineno": 1663,
-      "end_lineno": 1684,
+      "lineno": 1657,
+      "decorator_lineno": 1657,
+      "code_lineno": 1658,
+      "end_lineno": 1679,
       "loc": 22,
       "awaits": 3,
       "api_calls": [],
@@ -762,10 +712,10 @@
       "pattern": "^\\s*(?:/好感榜|好感榜)$",
       "description": "",
       "aliases": [],
-      "lineno": 1686,
-      "decorator_lineno": 1686,
-      "code_lineno": 1687,
-      "end_lineno": 1717,
+      "lineno": 1681,
+      "decorator_lineno": 1681,
+      "code_lineno": 1682,
+      "end_lineno": 1712,
       "loc": 31,
       "awaits": 4,
       "api_calls": [],
@@ -792,10 +742,10 @@
       "pattern": "^\\s*(?:/重置|重置).*",
       "description": "",
       "aliases": [],
-      "lineno": 1719,
-      "decorator_lineno": 1719,
-      "code_lineno": 1720,
-      "end_lineno": 1761,
+      "lineno": 1714,
+      "decorator_lineno": 1714,
+      "code_lineno": 1715,
+      "end_lineno": 1756,
       "loc": 42,
       "awaits": 5,
       "api_calls": [],
@@ -828,10 +778,10 @@
       "pattern": "^\\s*(?:/全服补偿|全服补偿)\\s+(\\d+)$",
       "description": "",
       "aliases": [],
-      "lineno": 1763,
-      "decorator_lineno": 1763,
-      "code_lineno": 1764,
-      "end_lineno": 1796,
+      "lineno": 1758,
+      "decorator_lineno": 1758,
+      "code_lineno": 1759,
+      "end_lineno": 1791,
       "loc": 33,
       "awaits": 3,
       "api_calls": [],
@@ -861,10 +811,10 @@
       "pattern": "^\\s*(?:/发钱|/扣钱|发钱|扣钱)\\s+.*?(\\-?\\d+)$",
       "description": "",
       "aliases": [],
-      "lineno": 1798,
-      "decorator_lineno": 1798,
-      "code_lineno": 1799,
-      "end_lineno": 1835,
+      "lineno": 1793,
+      "decorator_lineno": 1793,
+      "code_lineno": 1794,
+      "end_lineno": 1830,
       "loc": 37,
       "awaits": 5,
       "api_calls": [],
@@ -892,11 +842,11 @@
       "pattern": "^\\s*(?:/游戏机制|游戏机制)$",
       "description": "",
       "aliases": [],
-      "lineno": 1837,
-      "decorator_lineno": 1837,
-      "code_lineno": 1838,
-      "end_lineno": 1874,
-      "loc": 37,
+      "lineno": 1832,
+      "decorator_lineno": 1832,
+      "code_lineno": 1833,
+      "end_lineno": 1881,
+      "loc": 49,
       "awaits": 1,
       "api_calls": [],
       "config_keys": [

@@ -60,10 +60,13 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 
 ## 维护约定
 
-1. **新增指令**：在 `COMMAND_DOMAIN` 里登记它的域，否则会落到 `router`。
-2. **拆分模块后**：把 `gen_maintenance_map.py` 里的文件列表指到新路径，
+1. **改数值**：只改仓库根目录的 `balance.py`。插件行为、面板参数表、
+   概率热力图、周期次数图全部从它读取，改完重启（或等热重载）再跑一次生成器即可。
+   ⚠️ 例外：`gen_maintenance_map.py` 里的 `ECONOMY / PENALTIES / COMBAT`
+   三张说明性表格仍是手写常量，仅用于文档叙述，不影响插件。
+2. **调周期**：`balance.py` 的 `CYCLE_HOURS` 一处控制（24 = 一天）。
+3. **新增指令**：在 `COMMAND_DOMAIN` 里登记它的域，否则会落到 `router`。
+4. **拆分模块后**：把 `gen_maintenance_map.py` 里的文件列表指到新路径，
    或按新结构重写 `parse_commands()` 的输入——其余逻辑与文件结构无关。
-3. 面板里的数值（概率、经济表、惩罚表）是**从源码抄到脚本常量**的，改数值后请同步
-   `ECONOMY / PENALTIES / COMBAT` 三张表，否则文档会与代码脱节。
-4. 本目录下的 `.py` 必须保证 **import 期无副作用**：插件目录里的脚本有可能被加载器扫描，
+5. 本目录下的 `.py` 必须保证 **import 期无副作用**：插件目录里的脚本有可能被加载器扫描，
    导入时执行逻辑会导致整个插件加载失败。所有入口都写在 `if __name__ == "__main__"` 里。

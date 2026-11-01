@@ -9,6 +9,7 @@ from typing import Optional
 from maibot_sdk import MaiBotPlugin, Command, CONFIG_RELOAD_SCOPE_SELF
 
 from .config import PartnerGameConfig
+from . import balance as B
 from .realms import (
     MAX_LEVEL,
     REALMS,
@@ -21,7 +22,7 @@ from .realms import (
     rate_percent,
     realm_name,
 )
-from .utils import PersistStore, fetch_avatar_base64, today_str, format_user_display
+from .utils import PersistStore, fetch_avatar_base64, format_user_display
 
 class PartnerGamePlugin(MaiBotPlugin):
     config_model = PartnerGameConfig
@@ -327,11 +328,9 @@ class PartnerGamePlugin(MaiBotPlugin):
     def _get_user_data(self, group_id: str, qq: str) -> dict:
         users = self._store.data.setdefault("users", {})
         grp = users.setdefault(group_id, {})
+        today = B.period_key(self.config.partner_game.tz_offset_hours)
         
-        from .utils import today_str
-        today = today_str(self.config.partner_game.tz_offset_hours)
-        
-        user = grp.setdefault(qq, {"money": 1000, "level": 0, "last_allowance": today})
+        user = grp.setdefault(qq, {"money": B.INITIAL_MONEY, "level": 0, "last_allowance": today})
         # 兼容补全
         if "money" not in user:
             user["money"] = 1000
@@ -340,7 +339,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         # 每日低保
         if user.get("last_allowance") != today:
-            user["money"] += 200
+            user["money"] += B.CYCLE_ALLOWANCE
             user["last_allowance"] = today
             
         return user
@@ -354,15 +353,14 @@ class PartnerGamePlugin(MaiBotPlugin):
             
     def _check_daily_limit(self, group_id: str, qq: str, action: str, limit: int) -> bool:
         """检查今日是否超出限次，未超出则直接+1，并返回True。"""
-        from .utils import today_str
         import asyncio
-        today = today_str(self.config.partner_game.tz_offset_hours)
+        today = B.period_key(self.config.partner_game.tz_offset_hours)
         if self._store.purge_old(today):
             # 跨日自动增加好感度
             marriages = self._store.data.setdefault("marriages", {})
             for g_id, g_m in marriages.items():
                 for h_qq, m_info in g_m.items():
-                    m_info["affection"] = m_info.get("affection", 0) + 5
+                    m_info["affection"] = m_info.get("affection", 0) + B.MARRIAGE_AFFECTION_PER_CYCLE
             if self.config.partner_game.persist_enabled:
                 asyncio.create_task(self._store.save())
 
@@ -402,7 +400,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         key = f"{group_id}_{sender_qq}_{command}"
         cooldown = max(0, int(self.config.partner_game.cooldown_seconds or 60))
         # 强制封顶60秒自闭，无论传进来的 penalty_seconds 是多少
-        penalty_seconds = min(penalty_seconds, 60)
+        penalty_seconds = min(penalty_seconds, B.MAX_PENALTY_SECONDS)
         self._last_action[key] = time.time() + penalty_seconds - cooldown
 
     # /今日老婆
@@ -426,7 +424,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "cooldown", 2
 
         cfg = self.config.partner_game
-        today = today_str(cfg.tz_offset_hours)
+        today = B.period_key(cfg.tz_offset_hours)
 
         # 首先不论是否白名单，强制校验不能开后宫
         marriage = self._get_user_marriage(group_id, sender_qq)
@@ -438,7 +436,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "already_wife", 2
 
         # 检查抽取限次
-        if not self._check_daily_limit(group_id, sender_qq, "partner_game", 1):
+        if not self._check_daily_limit(group_id, sender_qq, "partner_game", B.DRAW_LIMIT):
             await self._send_text_at(group_id, sender_qq, "你今天已经抽取过伴侣了，请明天再来吧！")
             return True, "daily_limit", 2
 
@@ -569,10 +567,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "cooldown", 2
 
         cfg = self.config.partner_game
-        today = today_str(cfg.tz_offset_hours)
+        today = B.period_key(cfg.tz_offset_hours)
 
         # 每日限一次
-        if not self._check_daily_limit(group_id, sender_qq, "divorce", 1):
+        if not self._check_daily_limit(group_id, sender_qq, "divorce", B.DIVORCE_LIMIT):
             await self._send_text_at(group_id, sender_qq, "每日仅限一次离婚哦，明天再来吧~")
             return True, "limit_reached", 2
 
@@ -647,7 +645,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             del self.pending_proposals[reply_id]
                 
             cfg = self.config.partner_game
-            today = today_str(cfg.tz_offset_hours)
+            today = B.period_key(cfg.tz_offset_hours)
             
             if self._get_user_marriage(group_id, proposal["sender_qq"]) or self._get_user_marriage(group_id, sender_qq):
                 await self._send_avatar_msg(group_id, "发生变故，你们中有人已经有伴侣了！", sender_qq, "")
@@ -801,7 +799,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         # 确保有足够的罚款金币
         sender_data = self._get_user_data(group_id, sender_qq)
-        if sender_data["money"] < 300:
+        if sender_data["money"] < B.FORCE_GATE:
             await self._send_avatar_msg(group_id, "你的存款不足 300 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
             
@@ -811,12 +809,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         if is_forced:
             prob = 0.0
             
-        prob = max(0.0, min(1.0, prob))
+        prob = max(B.FORCE_FLOOR, min(B.FORCE_CAP, prob))
             
         if random.random() < prob:
             target_nick = await self._get_member_nick(group_id, target_qq)
-            from .utils import today_str
-            today = today_str(cfg.tz_offset_hours)
+            today = B.period_key(cfg.tz_offset_hours)
             marriages = self._store.data.setdefault("marriages", {})
             marriages.setdefault(group_id, {})[sender_qq] = {
                 "date": today,
@@ -832,7 +829,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
-            fine = random.randint(100, 300)
+            fine = random.randint(B.FORCE_FINE_MIN, B.FORCE_FINE_MAX)
             comp = fine // 2
             
             target_data = self._get_user_data(group_id, target_qq)
@@ -842,7 +839,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "force_marry", 60)
+            self._set_penalty(group_id, sender_qq, "force_marry", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
             
         return True, "Force Marry Done", 2
@@ -927,10 +924,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "No target error", 2
         
         cfg = self.config.partner_game
-        from .utils import today_str
-        today = today_str(cfg.tz_offset_hours)
+        today = B.period_key(cfg.tz_offset_hours)
         
-        if not self._check_daily_limit(group_id, sender_qq, "dump", 1):
+        if not self._check_daily_limit(group_id, sender_qq, "dump", B.DUMP_LIMIT):
             await self._send_avatar_msg(group_id, "每日仅限一次甩掉操作哦~", sender_qq, "")
             return True, "limit_reached", 2
                 
@@ -1020,7 +1016,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         # 确保有足够的罚款金币
         sender_data = self._get_user_data(group_id, sender_qq)
-        if sender_data["money"] < 500:
+        if sender_data["money"] < B.ROB_WIFE_GATE:
             await self._send_avatar_msg(group_id, "你的存款不足 500 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
             
@@ -1040,15 +1036,14 @@ class PartnerGamePlugin(MaiBotPlugin):
             prob = 0.0
         else:
             # 底蕴加成和护盾扣减 (0.25%/战力差, 每 20 好感减 1%)
-            prob = prob + power_win_bonus(delta_p) - (affection // 20 * 0.01)
+            prob = prob + power_win_bonus(delta_p) - B.affection_shield(affection)
             # 保底机制: 永远在 10% 到 90% 之间
-            prob = max(0.10, min(0.90, prob))
+            prob = max(B.ROB_FLOOR, min(B.ROB_CAP, prob))
         
         import random
         
         if random.random() < prob:
-            from .utils import today_str
-            today = today_str(cfg.tz_offset_hours)
+            today = B.period_key(cfg.tz_offset_hours)
             marriages = self._store.data.setdefault("marriages", {})
             
             # 删除原老公的老婆记录
@@ -1073,7 +1068,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
-            fine = random.randint(200, 500)
+            fine = random.randint(B.ROB_WIFE_FINE_MIN, B.ROB_WIFE_FINE_MAX)
             comp = fine // 2
             
             husband_data["money"] += comp
@@ -1081,14 +1076,14 @@ class PartnerGamePlugin(MaiBotPlugin):
             
             injury_msg = ""
             # Random chance to get injured if picking a fight and failing
-            if not is_forced and random.random() < 0.2 and sender_data["level"] > 0:
+            if not is_forced and random.random() < B.ROB_WIFE_DROP_CHANCE and sender_data["level"] > 0:
                 sender_data["level"] -= 1
                 injury_msg = "\n并且你被反杀成重伤，境界跌落了1层！"
                 
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_wife", 60)
+            self._set_penalty(group_id, sender_qq, "rob_wife", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
             
         return True, "Rob Wife Done", 2
@@ -1150,7 +1145,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         # Calculate modifiers
         delta_bonus = power_win_bonus(delta_p)
-        affection_penalty = (affection // 20) * 0.01
+        affection_penalty = B.affection_shield(affection)
         
         # Absolute numbers for display
         base_display = round(base_prob * 100, 2)
@@ -1162,7 +1157,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             final_display = 0.0
         else:
             final_prob = base_prob + delta_bonus - affection_penalty
-            final_prob = max(0.10, min(0.90, final_prob))
+            final_prob = max(B.ROB_FLOOR, min(B.ROB_CAP, final_prob))
             final_display = round(final_prob * 100, 2)
             
         target_nick = await self._get_member_nick(group_id, target_qq)
@@ -1228,12 +1223,12 @@ class PartnerGamePlugin(MaiBotPlugin):
         target_data = self._get_user_data(group_id, target_qq)
         
         # 保护低保户
-        if target_data["money"] < 100:
+        if target_data["money"] < B.ROB_MONEY_POOR_PROTECT:
             await self._send_avatar_msg(group_id, "对方穷得叮当响（资产低于100），你实在下不去手！", sender_qq, "")
             return True, "Target too poor", 2
             
         # 确保有足够的罚款金币
-        if sender_data["money"] < 300:
+        if sender_data["money"] < B.ROB_MONEY_GATE:
             await self._send_avatar_msg(group_id, "你的存款不足 300 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
 
@@ -1241,7 +1236,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         cfg = self.config.partner_game
         no_limit_users = [str(x) for x in (cfg.no_limit_users or [])]
         if sender_qq not in no_limit_users:
-            if not self._check_daily_limit(group_id, sender_qq, "rob_money", 3):
+            if not self._check_daily_limit(group_id, sender_qq, "rob_money", B.ROB_MONEY_LIMIT):
                 await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
@@ -1260,16 +1255,16 @@ class PartnerGamePlugin(MaiBotPlugin):
             # 底蕴加成 (0.25%/战力差, 无好感护盾)
             prob = prob + power_win_bonus(delta_p)
             # 保底机制: 永远在 10% 到 90% 之间
-            prob = max(0.10, min(0.90, prob))
+            prob = max(B.ROB_FLOOR, min(B.ROB_CAP, prob))
         
         import random
         target_nick = await self._get_member_nick(group_id, target_qq)
         
         if random.random() < prob:
             # 抢走 10% ~ 25%
-            ratio = random.uniform(0.10, 0.25)
+            ratio = random.uniform(B.ROB_MONEY_RATIO_MIN, B.ROB_MONEY_RATIO_MAX)
             stolen = int(target_data["money"] * ratio)
-            stolen = max(50, min(1500, stolen))
+            stolen = max(B.ROB_MONEY_STEAL_MIN, min(B.ROB_MONEY_STEAL_CAP, stolen))
             # 不超过目标实际拥有
             stolen = min(target_data["money"], stolen)
             
@@ -1281,7 +1276,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
-            fine = random.randint(100, 300)
+            fine = random.randint(B.ROB_MONEY_FINE_MIN, B.ROB_MONEY_FINE_MAX)
             comp = fine // 2
             
             target_data["money"] += comp
@@ -1290,7 +1285,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_money", 60)
+            self._set_penalty(group_id, sender_qq, "rob_money", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"打劫失败！【{target_nick}({target_qq})】战力爆发奋起反抗，不仅将你击退，官府还对你罚款了 {fine} 金币，并关入1分钟自闭小黑屋！\n（其中 {comp} 金币已作为正当防卫精神损失费赔偿给对方）", sender_qq, target_qq)
             
         return True, "Rob Money Done", 2
@@ -1334,7 +1329,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             final_display = 0.0
         else:
             final_prob = base_prob + delta_bonus
-            final_prob = max(0.10, min(0.90, final_prob))
+            final_prob = max(B.ROB_FLOOR, min(B.ROB_CAP, final_prob))
             final_display = round(final_prob * 100, 2)
             
         target_nick = await self._get_member_nick(group_id, target_qq)
@@ -1423,15 +1418,15 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
-        if not self._check_daily_limit(group_id, sender_qq, "work", 3):
+        if not self._check_daily_limit(group_id, sender_qq, "work", B.WORK_LIMIT):
             await self._send_avatar_msg(group_id, "你今天打工太累了，身体吃不消啦，明天再来吧！", sender_qq, "")
             return True, "limit", 2
 
         import random
         user_data = self._get_user_data(group_id, sender_qq)
         level = user_data.get("level", 0)
-        base_earn = random.randint(50, 100)
-        earn = base_earn + (level * 10)
+        base_earn = random.randint(B.WORK_EARN_MIN, B.WORK_EARN_MAX)
+        earn = base_earn + (level * B.WORK_LEVEL_BONUS)
         user_data["money"] += earn
         
         if self.config.partner_game.persist_enabled:
@@ -1458,17 +1453,17 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Single", 2
 
         user_data = self._get_user_data(group_id, sender_qq)
-        if user_data["money"] < 50:
+        if user_data["money"] < B.DATE_COST:
             await self._send_avatar_msg(group_id, "你的存款连 50 金币都没有，拿什么给伴侣买礼物？快去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
 
-        if not self._check_daily_limit(group_id, sender_qq, "date", 3):
+        if not self._check_daily_limit(group_id, sender_qq, "date", B.DATE_LIMIT):
             await self._send_avatar_msg(group_id, "伴侣今天约会累了，不想再出去了，明天再来吧！", sender_qq, "")
             return True, "limit", 2
 
-        user_data["money"] -= 50
+        user_data["money"] -= B.DATE_COST
         import random
-        add_aff = random.randint(10, 20)
+        add_aff = random.randint(B.DATE_AFF_MIN, B.DATE_AFF_MAX)
         
         marriages = self._store.data.setdefault("marriages", {})
         grp_m = marriages.setdefault(group_id, {})
@@ -1514,7 +1509,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"修炼需要购买丹药，当前境界单次修炼需消耗 {cost} 金币，你的存款不足！", sender_qq, "")
             return True, "No money", 2
 
-        if not self._check_daily_limit(group_id, sender_qq, "cultivate", 3):
+        if not self._check_daily_limit(group_id, sender_qq, "cultivate", B.CULTIVATE_LIMIT):
             await self._send_avatar_msg(group_id, "你今天修炼过度，经脉胀痛，请明日再来！", sender_qq, "")
             return True, "limit", 2
 
@@ -1525,19 +1520,19 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         if is_major_breakthrough:
             # 40% success
-            if random.random() < 0.4:
+            if random.random() < B.MAJOR_SUCCESS_RATE:
                 user_data["level"] += 1
                 msg = f"突破成功！天降祥瑞，你成功迈入了【{realm_name(user_data['level'])}】！"
             else:
                 # Failed, 30% chance drop
-                if random.random() < 0.3 and user_data["level"] > 0:
+                if random.random() < B.MAJOR_FAIL_DROP_RATE and user_data["level"] > 0:
                     user_data["level"] -= 1
                     msg = "突破失败！你急于求成导致走火入魔，根基受损，境界跌落了 1 层！"
                 else:
                     msg = "突破失败！瓶颈太过坚固，你气血翻涌，未能突破。"
         else:
             # 80% success
-            if random.random() < 0.8:
+            if random.random() < B.MINOR_SUCCESS_RATE:
                 user_data["level"] += 1
                 msg = f"修炼顺利！你稳扎稳打，达到了【{realm_name(user_data['level'])}】。"
             else:
@@ -1571,7 +1566,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             aff = marriage.get("affection", 0)
             real_nick = await self._get_member_nick(group_id, marriage['partner_uid'])
             msg += f"伴侣：{real_nick} ({rel})\n"
-            msg += f"好感：{aff} 点 (可抵消 {aff // 20}% 抢夺风险)\n"
+            msg += f"好感：{aff} 点 (可抵消 {B.shield_steps(aff)}% 抢夺风险)\n"
         else:
             msg += "伴侣：单身贵族\n"
             
@@ -1852,23 +1847,35 @@ class PartnerGamePlugin(MaiBotPlugin):
             "⚔️【修仙战力系统】\n"
             f"• 境界体系：{len(REALMS)} 个大境界 × 4 小境界（{'/'.join(SUB_REALMS)}），"
             f"共 {MAX_LEVEL + 1} 档，从 {REALMS[0]} 到 {REALMS[-1]}。\n"
-            "• 修炼消耗：每日限3次，每次消耗 (当前大境界序号 + 1) × 50 金币。\n"
-            "• 修炼突破：小境界突破成功率 80%（失败无惩罚）；大境界突破成功率 40%，且失败时有 30% 概率走火入魔掉落 1 级。\n"
-            "• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 20% 概率被反杀掉落 1 级。\n"
+            f"• 修炼消耗：每周期限 {B.CULTIVATE_LIMIT} 次，每次消耗 (当前大境界序号 + 1) × {B.CULTIVATE_COST_BASE} 金币。\n"
+            f"• 修炼突破：小境界成功率 {B.MINOR_SUCCESS_RATE:.0%}（失败无惩罚）；大境界成功率 {B.MAJOR_SUCCESS_RATE:.0%}，"
+            f"失败后有 {B.MAJOR_FAIL_DROP_RATE:.0%} 概率走火入魔掉落 1 级。\n"
+            f"• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率被反杀掉落 1 级。\n"
             "---\n"
             "💰【经济财富系统】\n"
-            "• 初始资金：1000 金币。每日首次互动发放 200 金币低保。\n"
-            "• 打工收入：基础 50~100 金币 + (当前等级 × 10) 金币加成。\n"
-            "• 约会消耗：每次消耗 50 金币，增加 10~20 点好感度。\n"
+            f"• 初始资金：{B.INITIAL_MONEY} 金币。每周期首次互动发放 {B.CYCLE_ALLOWANCE} 金币低保。\n"
+            f"• 打工收入：基础 {B.WORK_EARN_MIN}~{B.WORK_EARN_MAX} 金币 + (当前等级 × {B.WORK_LEVEL_BONUS}) 金币加成，"
+            f"每周期限 {B.WORK_LIMIT} 次。\n"
+            f"• 约会消耗：每次 {B.DATE_COST} 金币，增加 {B.DATE_AFF_MIN}~{B.DATE_AFF_MAX} 点好感度，"
+            f"每周期限 {B.DATE_LIMIT} 次。\n"
             "---\n"
             "😈【互动犯罪机制】\n"
-            f"• 强娶：基础概率 {prob_force}%。资金门槛 300，失败罚款 100~300 金币（50%赔给防守方）。\n"
-            f"• 抢老婆：基础概率 {prob_rob}%。资金门槛 500，失败罚款 200~500 金币（50%赔给防守方原配），并有20%概率掉级。\n"
-            f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。资金门槛 300，成功抢走目标 10%~25% 资产（最高1500）。失败罚款 100~300 金币（50%赔给防守方）。低保户（资产<100）不可被打劫。\n"
+            f"• 强娶：基础概率 {prob_force}%。资金门槛 {B.FORCE_GATE}，"
+            f"失败罚款 {B.FORCE_FINE_MIN}~{B.FORCE_FINE_MAX} 金币（{B.FINE_COMPENSATION_RATIO:.0%} 赔给防守方）。\n"
+            f"• 抢老婆：基础概率 {prob_rob}%。资金门槛 {B.ROB_WIFE_GATE}，"
+            f"失败罚款 {B.ROB_WIFE_FINE_MIN}~{B.ROB_WIFE_FINE_MAX} 金币"
+            f"（{B.FINE_COMPENSATION_RATIO:.0%} 赔给防守方原配），并有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率掉级。\n"
+            f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。"
+            f"资金门槛 {B.ROB_MONEY_GATE}，成功抢走目标 {B.ROB_MONEY_RATIO_MIN:.0%}~{B.ROB_MONEY_RATIO_MAX:.0%} 资产"
+            f"（{B.ROB_MONEY_STEAL_MIN}~{B.ROB_MONEY_STEAL_CAP} 金币），每周期限 {B.ROB_MONEY_LIMIT} 次。"
+            f"失败罚款 {B.ROB_MONEY_FINE_MIN}~{B.ROB_MONEY_FINE_MAX} 金币（{B.FINE_COMPENSATION_RATIO:.0%} 赔给防守方）。"
+            f"资产低于 {B.ROB_MONEY_POOR_PROTECT} 的玩家受保护。\n"
             "• 犯罪概率浮动公式：\n"
             "  1. 战力压制：采用【底蕴战力=等级×(大境界数+1)】，(进攻方战力 - 防守方最高战力) × " + rate_percent() + "。\n"
-            "  2. 好感抵消（仅限抢老婆）：夫妻好感度每 20 点，减免 1% 成功率。\n"
-            "  3. 绝对保底：所有加成计算后，成功率强制锁定在 10% ~ 90% 之间。"
+            f"  2. 好感抵消（仅限抢老婆）：夫妻好感度每 {B.AFFECTION_PER_SHIELD} 点，"
+            f"减免 {B.AFFECTION_SHIELD_RATE:.0%} 成功率。\n"
+            f"  3. 绝对保底：所有加成计算后，成功率强制锁定在 {B.ROB_FLOOR:.0%} ~ {B.ROB_CAP:.0%} 之间。"
+            f"（强娶不参与战力，区间 {B.FORCE_FLOOR:.0%} ~ {B.FORCE_CAP:.0%}）"
         )
         await self._send_forward_msg(group_id, sender_qq, "游戏机制详细说明", info_text)
         return True, "Game info", 2

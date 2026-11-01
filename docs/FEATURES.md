@@ -9,7 +9,7 @@
 | 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 24 |
-| plugin.py | 1877 行 |
+| plugin.py | 1884 行 |
 | config.py | 113 行 |
 | utils.py | 113 行 |
 | __init__.py | 2 行 |
@@ -22,12 +22,12 @@
 | 域 | 职责 | 指令数 | 代码行 | 关键位置 |
 |---|---|---:|---:|---|
 | **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | — | 0 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
-| **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 7 | 531 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
+| **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 7 | 529 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
 | **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 3 | 121 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
 | **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 1 | 58 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
-| **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 4 | 395 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
+| **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 4 | 394 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
 | **惩罚与限次** | 冷却、每日次数、失败自闭、罚款、掉级 | — | 0 | `plugin.py:376-386`；`plugin.py:343-373`；`plugin.py:388-394` |
-| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 195 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
+| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 207 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
 | **数据与持久化** | JSON 存档、防抖写盘、跨日重置 | — | 0 | `utils.py:50-113`；`utils.py:81-104`；`plugin.py:348-355` |
 | **配置** | 17 个可调参数与管理员/白名单 | — | 0 | `config.py:8-19`；`config.py:24-38`；`config.py:39-48, 94-102` |
 | **管理运维** | 重置、全服补偿、定向发钱 | 3 | 112 | `plugin.py:1728-1732`；`plugin.py:1719-1761`；`plugin.py:1763-1796` |
@@ -141,30 +141,30 @@
 
 | 指令 ID | 玩法 | 域 | 起始行 | 行数 | await | 数据表 | 配置项 | 每日次数 |
 |---|---|---|---:|---:|---:|---|---|---|
-| `partner_game` | 今日老婆 | 婚姻关系 | 414 | 136 | 13 | daily_usage、marriages | exclude_self、exclude_sender、forced_wives、persist_enabled、tz_offset_hours | partner_game×1 |
-| `partner_game_divorce` | 离婚 | 婚姻关系 | 555 | 43 | 8 | daily_usage、marriages | persist_enabled、tz_offset_hours | divorce×1 |
-| `proposal_reply` | 求婚应答 | 婚姻关系 | 600 | 71 | 6 | marriages | persist_enabled、proposal_timeout_seconds、tz_offset_hours | — |
-| `marry` | 娶 | 婚姻关系 | 673 | 78 | 11 | marriages | avatar_size、send_avatar | — |
-| `force_marry` | 强娶 | 婚姻关系 | 753 | 96 | 14 | marriages、users | cooldown_seconds、force_marry_probability、persist_enabled、tz_offset_hours | — |
-| `my_partner` | 我的伴侣 | 婚姻关系 | 851 | 49 | 8 | marriages | — | — |
-| `dump_partner` | 甩掉 | 婚姻关系 | 902 | 58 | 10 | daily_usage、marriages | persist_enabled、tz_offset_hours | dump×1 |
-| `rob_wife` | 抢老婆 | 战斗结算 | 962 | 133 | 15 | marriages、users | cooldown_seconds、persist_enabled、rob_wife_probability、tz_offset_hours | — |
-| `rob_chance` | 抢老婆胜率 | 战斗结算 | 1097 | 96 | 7 | marriages、users | rob_wife_probability | — |
-| `rob_money` | 打劫 | 战斗结算 | 1195 | 102 | 13 | daily_usage、marriages、users | no_limit_users、persist_enabled | rob_money×3 |
-| `rob_money_chance` | 打劫胜率 | 战斗结算 | 1299 | 64 | 4 | users | — | — |
-| `partner_game_help` | 帮助 | 展示与输出 | 1365 | 48 | 1 | — | force_marry_probability、rob_wife_probability | — |
-| `work` | 打工 | 经济财富 | 1415 | 27 | 3 | daily_usage、users | persist_enabled | work×3 |
-| `date` | 约会 | 经济财富 | 1444 | 47 | 6 | daily_usage、marriages、users | persist_enabled | date×3 |
-| `cultivate` | 修炼 | 修仙成长 | 1493 | 58 | 5 | daily_usage、users | persist_enabled | cultivate×3 |
-| `status` | 我的状态 | 展示与输出 | 1553 | 32 | 2 | daily_usage、marriages、users | — | — |
-| `transfer` | 上交存款 | 经济财富 | 1587 | 47 | 6 | marriages、users | persist_enabled | — |
-| `rank_power` | 战力榜 | 展示与输出 | 1636 | 25 | 3 | users | — | — |
-| `rank_money` | 财富榜 | 展示与输出 | 1663 | 22 | 3 | users | — | — |
-| `rank_affection` | 好感榜 | 展示与输出 | 1687 | 31 | 4 | marriages | — | — |
-| `admin_reset` | 重置 | 管理运维 | 1720 | 42 | 5 | daily_usage、marriages | admin_users、persist_enabled | — |
-| `admin_compensate` | 全服补偿 | 管理运维 | 1764 | 33 | 3 | users | admin_users、persist_enabled | — |
-| `admin_give_money` | 发钱/扣钱 | 管理运维 | 1799 | 37 | 5 | users | admin_users、persist_enabled | — |
-| `game_info` | 游戏机制 | 展示与输出 | 1838 | 37 | 1 | — | force_marry_probability、rob_wife_probability | — |
+| `partner_game` | 今日老婆 | 婚姻关系 | 412 | 136 | 13 | daily_usage、marriages | exclude_self、exclude_sender、forced_wives、persist_enabled、tz_offset_hours | — |
+| `partner_game_divorce` | 离婚 | 婚姻关系 | 553 | 43 | 8 | daily_usage、marriages | persist_enabled、tz_offset_hours | — |
+| `proposal_reply` | 求婚应答 | 婚姻关系 | 598 | 71 | 6 | marriages | persist_enabled、proposal_timeout_seconds、tz_offset_hours | — |
+| `marry` | 娶 | 婚姻关系 | 671 | 78 | 11 | marriages | avatar_size、send_avatar | — |
+| `force_marry` | 强娶 | 婚姻关系 | 751 | 95 | 14 | marriages、users | cooldown_seconds、force_marry_probability、persist_enabled、tz_offset_hours | — |
+| `my_partner` | 我的伴侣 | 婚姻关系 | 848 | 49 | 8 | marriages | — | — |
+| `dump_partner` | 甩掉 | 婚姻关系 | 899 | 57 | 10 | daily_usage、marriages | persist_enabled、tz_offset_hours | — |
+| `rob_wife` | 抢老婆 | 战斗结算 | 958 | 132 | 15 | marriages、users | cooldown_seconds、persist_enabled、rob_wife_probability、tz_offset_hours | — |
+| `rob_chance` | 抢老婆胜率 | 战斗结算 | 1092 | 96 | 7 | marriages、users | rob_wife_probability | — |
+| `rob_money` | 打劫 | 战斗结算 | 1190 | 102 | 13 | daily_usage、marriages、users | no_limit_users、persist_enabled | — |
+| `rob_money_chance` | 打劫胜率 | 战斗结算 | 1294 | 64 | 4 | users | — | — |
+| `partner_game_help` | 帮助 | 展示与输出 | 1360 | 48 | 1 | — | force_marry_probability、rob_wife_probability | — |
+| `work` | 打工 | 经济财富 | 1410 | 27 | 3 | daily_usage、users | persist_enabled | — |
+| `date` | 约会 | 经济财富 | 1439 | 47 | 6 | daily_usage、marriages、users | persist_enabled | — |
+| `cultivate` | 修炼 | 修仙成长 | 1488 | 58 | 5 | daily_usage、users | persist_enabled | — |
+| `status` | 我的状态 | 展示与输出 | 1548 | 32 | 2 | daily_usage、marriages、users | — | — |
+| `transfer` | 上交存款 | 经济财富 | 1582 | 47 | 6 | marriages、users | persist_enabled | — |
+| `rank_power` | 战力榜 | 展示与输出 | 1631 | 25 | 3 | users | — | — |
+| `rank_money` | 财富榜 | 展示与输出 | 1658 | 22 | 3 | users | — | — |
+| `rank_affection` | 好感榜 | 展示与输出 | 1682 | 31 | 4 | marriages | — | — |
+| `admin_reset` | 重置 | 管理运维 | 1715 | 42 | 5 | daily_usage、marriages | admin_users、persist_enabled | — |
+| `admin_compensate` | 全服补偿 | 管理运维 | 1759 | 33 | 3 | users | admin_users、persist_enabled | — |
+| `admin_give_money` | 发钱/扣钱 | 管理运维 | 1794 | 37 | 5 | users | admin_users、persist_enabled | — |
+| `game_info` | 游戏机制 | 展示与输出 | 1833 | 49 | 1 | — | force_marry_probability、rob_wife_probability | — |
 
 ## 3. 数据模型
 

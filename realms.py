@@ -91,9 +91,15 @@ def power(level: int) -> int:
     return level * (level // PER_REALM + 1)
 
 
+try:                                    # 兼容"作为包导入"与"作为顶层模块导入"
+    from .balance import CULTIVATE_COST_BASE
+except ImportError:                     # docs/tools 里是 `import realms`（顶层）
+    from balance import CULTIVATE_COST_BASE
+
+
 def cultivate_cost(level: int) -> int:
-    """在 level 处突破一次的丹药费用。"""
-    return (realm_index(level) + 1) * 50
+    """在 level 处突破一次的丹药费用（系数来自 balance.py）。"""
+    return (realm_index(level) + 1) * CULTIVATE_COST_BASE
 
 
 # ---------------------------------------------------------------- 战力求胜率
