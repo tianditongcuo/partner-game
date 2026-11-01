@@ -114,7 +114,6 @@ DOMAIN_DETAIL = {
     "penalty": [
         ("通用冷却", "_check_cooldown：key = 群_用户_指令，默认 60s，仅 9 条指令接入", "plugin.py:376-386"),
         ("每日次数", "_check_daily_limit：1 或 3 次/日，白名单可豁免抽取/离婚/甩人", "plugin.py:343-373"),
-        ("失败自闭", "_set_penalty：用 last = now + penalty − cooldown 反推，封顶 60s", "plugin.py:388-394"),
         ("罚款", "三处内联：强娶 100~300 / 抢老婆 200~500 / 打劫 100~300", "见各 handler"),
         ("掉级", "修炼反噬、抢老婆被反杀，两处独立随机判定", "plugin.py:1529-1531, 1072-1074"),
     ],
@@ -441,7 +440,7 @@ def section_arch(m):
                    "路由 + 业务逻辑 + 文案 + 数值计算，全部挤在 plugin.py 里"))
     out.append('<text x="14" y="142" class="lane">② 领域层 · 仅 6 个零散私有方法，没有真正的服务对象</text>')
     for i, name in enumerate(["_get_user_data", "_get_user_marriage", "_check_daily_limit",
-                              "_check_cooldown", "_set_penalty", "_get_member_nick"]):
+                              "_check_cooldown", "_get_member_nick"]):
         out.append(box(14 + i * 146, 158, 136, 40, name, "#8b5cf6"))
     out.append('<text x="14" y="252" class="lane">③ 存储层 · PersistStore.data（4 张表，无事务、无锁、无迁移）</text>')
     for i, k in enumerate(m["data_keys"]):
@@ -777,8 +776,6 @@ BALANCE_META = [
     ("共用", "FINE_FLOOR", "罚款下限"),
     ("共用", "FINE_CAP_RATIO", "罚款上限 = 现有金币 × 本值"),
     ("共用", "FINE_COMPENSATION_RATIO", "罚款中赔付给对手的比例（其余蒸发）"),
-    ("共用", "FAIL_AUTISM_SECONDS", "失败后的强制自闭时长（秒）"),
-    ("共用", "MAX_PENALTY_SECONDS", "自闭时长硬上限（秒）"),
     ("氪金", "RECHARGE_COINS_PER_PERCENT", "每多少金币换 1% 加成"),
     ("氪金", "RECHARGE_CAP", "加成总上限"),
     ("氪金", "RECHARGE_MIN_AMOUNT", "单次氪金下限"),

@@ -493,29 +493,13 @@ class PartnerGamePlugin(MaiBotPlugin):
         self._last_action[key] = now
         return False, 0
 
-    def _set_penalty(self, group_id: str, sender_qq: str, command: str, penalty_seconds: int,
-                     cooldown=None):
-        """把某条指令的"上次触发时间"往前推，制造一段额外冷却。
-
-        `_check_cooldown` 的判定是 `now - last < cooldown`。
-        想让"接下来 penalty 秒内都不能用"，就把 last 设成
-        `now + penalty - cooldown` —— 这样剩余时间正好是 penalty，
-        而不是 cooldown + penalty。别改成直觉写法，会多罚一个冷却周期。
-        """
-        key = f"{group_id}_{sender_qq}_{command}"
-        cooldown = self._cooldown_of(cooldown)
-        penalty_seconds = min(penalty_seconds, B.MAX_PENALTY_SECONDS)
-        self._last_action[key] = time.time() + penalty_seconds - cooldown
-
     def _calc_steal_amount(self, victim_money: int) -> int:
         """算出一次成功打劫能抢走多少金币（允许把对方打成负债）。
 
         规则：
-          1. 正常有存款：按 10%~25% 抢，且不超过「现有金币 × 上限倍数」
-             （倍数 > 1 才能抢出负债，默认 1.5）；
-          2. 抢掠下限（默认 50）在封顶之后再兜底 —— 所以身上只剩 10 金币的人
-             也会被抢走 50，从而变成 -40；
-          3. 资产 ≤ 0 的人：只按负资产保护上限抢（默认 100），避免被无限刷。
+          1. 正常有存款：按比例抢，且不超过「现有金币 × 上限倍数」；
+          2. 抢掠下限在封顶之后再兜底 —— 所以只剩 10 金币的人也会被抢走 50；
+          3. 资产 ≤ 0 的人：只按负资产保护上限抢，避免被无限刷。
         """
         if victim_money <= 0:
             return B.ROB_MONEY_NEGATIVE_CAP
@@ -547,6 +531,17 @@ class PartnerGamePlugin(MaiBotPlugin):
         age = time.time() - float(loan.get("borrowed_at", 0))
         return age > B.LOAN_GRACE_MINUTES * 60
 
+    def _loan_block(self, group_id: str, qq: str, action: str = "") -> bool:
+        """逾期期间的限制：只允许打工 / 下秘境 / 还贷。
+
+        返回 True 表示这次操作应当被拦下（调用方负责发提示）。
+        """
+        if action in ("work", "realm_dive", "repay"):
+            return False
+        user = self._get_user_data(group_id, qq)
+        return self._loan_overdue(user)
+
+    # ---------------- 消息解析 ----------------
     def _message_text(self, kwargs) -> str:
         """取出消息纯文本（兼容 processed_plain_text / raw_message 段 / 兜底字段）。"""
         msg = kwargs.get("message")
@@ -570,26 +565,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         nums = re.findall(r"-?\d+", self._message_text(kwargs))
         return int(nums[-1]) if nums else None
 
-    def _loan_block(self, group_id: str, qq: str, action: str = "") -> bool:
-        """逾期期间的限制：只允许打工 / 下秘境 / 还贷。
-
-        返回 True 表示这次操作应当被拦下（调用方负责发提示）。
-        """
-        if action in ("work", "realm_dive", "repay"):
-            return False
-        user = self._get_user_data(group_id, qq)
-        return self._loan_overdue(user)
-
     # ---------------- 氪金 ----------------
     def _add_recharge(self, user: dict, amount: int) -> float:
-        """把金币换成「下次行动加成」，返回本次新增的加成比例。
+        """把金币换成「下次行动加成」，返回累加后的总加成比例。
 
         换算：每 RECHARGE_COINS_PER_PERCENT 金币 = 1%，总加成不超过 RECHARGE_CAP。
         """
         gain = amount / float(B.RECHARGE_COINS_PER_PERCENT) / 100.0
         total = min(B.RECHARGE_CAP, float(user.get("recharge", 0) or 0) + gain)
         user["recharge"] = total
-        return total - gain
+        return total
 
     def _take_recharge(self, user: dict) -> float:
         """取出并清空待用的氪金加成（一次性）。"""
@@ -598,7 +583,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             user.pop("recharge", None)
         return bonus
 
-    # ---------------- 天妒 / 天罚 ----------------
+    # ---------------- 天妒 / 天罚计数器 ----------------
     def _bump_counter(self, group_id: str, qq: str, key: str) -> int:
         """给本周期计数器 +1 并返回新值（存于 daily_usage，跨周期自动清零）。"""
         usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
@@ -1138,9 +1123,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "force_marry",
-                              B.FORCE_AUTISM_SECONDS, B.COOLDOWN_FORCE)
-            await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
+            await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，冷却结束后才能再次行动！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
         if tian_fa:
@@ -1387,9 +1370,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_wife",
-                              B.ROB_WIFE_AUTISM_SECONDS, B.COOLDOWN_ROB_WIFE)
-            await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
+            await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，冷却结束后才能再次行动！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
         if tian_fa:
@@ -1553,9 +1534,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
                 
-            self._set_penalty(group_id, sender_qq, "rob_money",
-                              B.ROB_MONEY_AUTISM_SECONDS, B.COOLDOWN_ROB_MONEY)
-            await self._send_avatar_msg(group_id, f"打劫失败！【{target_nick}({target_qq})】战力爆发奋起反抗，不仅将你击退，官府还对你罚款了 {fine} 金币，并关入1分钟自闭小黑屋！\n（其中 {comp} 金币已作为正当防卫精神损失费赔偿给对方）", sender_qq, target_qq)
+            await self._send_avatar_msg(group_id, f"打劫失败！【{target_nick}({target_qq})】战力爆发奋起反抗，不仅将你击退，官府还对你罚款了 {fine} 金币，冷却结束后才能再次行动！\n（其中 {comp} 金币已作为正当防卫精神损失费赔偿给对方）", sender_qq, target_qq)
             
         tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
         if tian_fa:

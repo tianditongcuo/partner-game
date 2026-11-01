@@ -67,7 +67,6 @@ SPEC = [
     ("ROB_FLOOR", "共用", 0, 1, 0.01, "ratio", "抢夺/打劫胜率下限"),
     ("ROB_CAP", "共用", 0, 1, 0.01, "ratio", "抢夺/打劫胜率上限"),
     ("FINE_COMPENSATION_RATIO", "共用", 0, 1, 0.01, "ratio", "罚款赔付比例"),
-    ("FAIL_AUTISM_SECONDS", "共用", 0, 600, 10, "int", "失败自闭秒数"),
     ("MAX_PENALTY_SECONDS", "共用", 0, 600, 10, "int", "自闭硬上限"),
 ]
 

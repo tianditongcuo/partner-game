@@ -346,6 +346,16 @@ async def run(mod, pkg):
     ok &= (first == 0 and hit2 and not hit3)
     results.append(("独立冷却", "第二次 rob_money 剩余 %ds，rob_wife 不受影响" % rem2, "互不干扰"))
 
+    # ---- 失败后只剩该行动的冷却（不再有独立"失败自闭"）----
+    reset()
+    ctx("u3")
+    p._extract_at_qq = lambda kwargs: "u4"
+    with patch.object(random, "random", return_value=0.99),          patch.object(random, "randint", return_value=150):
+        await p.handle_force_marry(stream_id="", message={"processed_plain_text": "/强娶 @u4"})
+    is_cd, rem = p._check_cooldown(G, "u3", "force_marry", B.COOLDOWN_FORCE)
+    ok &= bool(is_cd) and rem <= B.COOLDOWN_FORCE
+    results.append(("失败只剩冷却", "剩余 %ds（上限 %ds）" % (rem, B.COOLDOWN_FORCE), "不应超过冷却值"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

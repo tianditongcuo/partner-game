@@ -137,30 +137,20 @@ REALM_DIVE_DEATH_PROB = 0.05     # 陨落（修为归零、金币保留）
 # ============================================================ 罚款与惩罚
 FINE_COMPENSATION_RATIO = 0.5  # 罚款中赔付给对手的比例（其余蒸发）
 
-# ---- 罚款与自闭：每种犯罪独立配置，互不影响 ----
+# ---- 罚款：每种犯罪独立配置，互不影响 ----
+# 注：失败后的等待时间统一由下方「冷却」控制，不再单设"失败自闭"。
 #: 强娶失败罚款下限
 FORCE_FINE_FLOOR = 100
 #: 强娶失败罚款上限 = 行动者现有金币 × 本值
 FORCE_FINE_CAP_RATIO = 1.0
-#: 强娶失败后的自闭时长（秒）
-FORCE_AUTISM_SECONDS = 60
-
 #: 抢老婆失败罚款下限
 ROB_WIFE_FINE_FLOOR = 100
 #: 抢老婆失败罚款上限 = 行动者现有金币 × 本值
 ROB_WIFE_FINE_CAP_RATIO = 1.0
-#: 抢老婆失败后的自闭时长（秒）
-ROB_WIFE_AUTISM_SECONDS = 60
-
 #: 打劫失败罚款下限
 ROB_MONEY_FINE_FLOOR = 100
 #: 打劫失败罚款上限 = 行动者现有金币 × 本值
 ROB_MONEY_FINE_CAP_RATIO = 1.0
-#: 打劫失败后的自闭时长（秒）
-ROB_MONEY_AUTISM_SECONDS = 60
-
-MAX_PENALTY_SECONDS = 120      # 自闭时长硬上限（防止配置失误把人锁死）
-
 # ---- 冷却：每条指令独立，0 表示无冷却 ----
 COOLDOWN_DRAW = 60         # /今日老婆
 COOLDOWN_DIVORCE = 60      # /离婚

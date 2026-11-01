@@ -262,7 +262,7 @@ class BalanceMarriageSection(PluginConfigBase):
 
 
 class BalanceForceSection(PluginConfigBase):
-    """⑤ 强娶 —— 本行动专属的门槛、罚款、自闭与冷却。"""
+    """⑤ 强娶 —— 本行动专属的门槛、罚款与冷却。"""
 
     __ui_label__: ClassVar[str] = "⑤ 强娶"
     __ui_order__: ClassVar[int] = 6
@@ -277,16 +277,13 @@ class BalanceForceSection(PluginConfigBase):
         default=None,
         description="强娶失败的罚款上限 = 行动者现有金币 × 本值。默认 1.0（最多罚光）。",
         json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 52, "step": 0.1})
-    force_autism_seconds: Optional[int] = Field(
-        default=None, description="强娶失败后的自闭秒数。默认 60。",
-        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 53, "step": 10})
     cooldown_force: Optional[int] = Field(
         default=None, description="/强娶 的冷却秒数。默认 60；填 0 = 无冷却。",
         json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 54, "step": 10})
 
 
 class BalanceRobWifeSection(PluginConfigBase):
-    """⑥ 抢老婆 —— 本行动专属的门槛、罚款、掉级、自闭与冷却。"""
+    """⑥ 抢老婆 —— 本行动专属的门槛、罚款、掉级与冷却。"""
 
     __ui_label__: ClassVar[str] = "⑥ 抢老婆"
     __ui_order__: ClassVar[int] = 7
@@ -303,16 +300,13 @@ class BalanceRobWifeSection(PluginConfigBase):
     rob_wife_drop_chance: Optional[float] = Field(
         default=None, description="抢老婆失败后被反杀掉 1 级的概率。默认 0.2。",
         json_schema_extra={"label": "失败掉级概率", "placeholder": "默认 0.2", "order": 63, "step": 0.05})
-    rob_wife_autism_seconds: Optional[int] = Field(
-        default=None, description="抢老婆失败后的自闭秒数。默认 60。",
-        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 64, "step": 10})
     cooldown_rob_wife: Optional[int] = Field(
         default=None, description="/抢老婆 的冷却秒数。默认 60；填 0 = 无冷却。",
         json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 65, "step": 10})
 
 
 class BalanceRobMoneySection(PluginConfigBase):
-    """⑦ 打劫 —— 本行动专属的门槛、金额、罚款、自闭与冷却。"""
+    """⑦ 打劫 —— 本行动专属的门槛、金额、罚款与冷却。"""
 
     __ui_label__: ClassVar[str] = "⑦ 打劫"
     __ui_order__: ClassVar[int] = 8
@@ -333,9 +327,6 @@ class BalanceRobMoneySection(PluginConfigBase):
     rob_money_fine_cap_ratio: Optional[float] = Field(
         default=None, description="打劫失败的罚款上限 = 行动者现有金币 × 本值。默认 1.0。",
         json_schema_extra={"label": "罚款上限比例", "placeholder": "默认 1.0", "order": 74, "step": 0.1})
-    rob_money_autism_seconds: Optional[int] = Field(
-        default=None, description="打劫失败后的自闭秒数。默认 60。",
-        json_schema_extra={"label": "失败自闭（秒）", "placeholder": "默认 60", "order": 75, "step": 10})
     cooldown_rob_money: Optional[int] = Field(
         default=None, description="/打劫 的冷却秒数。默认 60；填 0 = 无冷却。",
         json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 76, "step": 10})
@@ -455,9 +446,6 @@ class BalanceHeavenSection(PluginConfigBase):
         default=None,
         description="所有罚款中赔付给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。",
         json_schema_extra={"label": "罚款赔付比例", "placeholder": "默认 0.5", "order": 115, "step": 0.05})
-    max_penalty_seconds: Optional[int] = Field(
-        default=None, description="自闭时长的硬上限（秒），防止配置失误把人永久锁死。默认 120。",
-        json_schema_extra={"label": "自闭硬上限（秒）", "placeholder": "默认 120", "order": 116, "step": 10})
 
 
 class PartnerGameConfig(PluginConfigBase):
