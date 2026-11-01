@@ -9,6 +9,7 @@ from typing import Optional
 from maibot_sdk import MaiBotPlugin, Command, CONFIG_RELOAD_SCOPE_SELF
 
 from .config import PartnerGameConfig
+from . import combat
 from . import balance as B
 from .realms import (
     MAX_LEVEL,
@@ -17,12 +18,25 @@ from .realms import (
     cultivate_cost,
     is_major_boundary,
     is_max_level,
-    power,
-    power_win_bonus,
     rate_percent,
     realm_name,
 )
 from .utils import PersistStore, fetch_avatar_base64, format_user_display
+
+
+def parse_forced_rules(rules):
+    """把 forced_wives 配置解析成 `{发起人QQ: 目标QQ}`。
+
+    配置里每条是 `"发起人:目标"`，同时容忍中文冒号和等号，
+    手滑写了个格式不对的条目就整条忽略（返回 False），不会抛异常。
+    抽取（指定老婆）和犯罪（锁 0 胜率）都走这一份解析。
+    """
+    out = {}
+    for rule in rules or []:
+        parts = str(rule).replace("：", ":").replace("=", ":").split(":")
+        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+            out[parts[0].strip()] = parts[1].strip()
+    return out
 
 class PartnerGamePlugin(MaiBotPlugin):
     config_model = PartnerGameConfig
@@ -90,6 +104,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         )
 
     def _extract_at_qq(self, kwargs: dict) -> Optional[str]:
+        """从消息里取出被 @ 的 QQ 号。
+
+        为什么有 4 层兜底：不同适配器（NapCat / SnowLuma / 其它）给的结构不一样，
+        有的把 @ 放在 `message.raw_message` 的段里，有的放在 `raw_event.message`，
+        还有的只留一段 `[CQ:at,qq=...]` 文本。按"最可靠 → 最兜底"的顺序试，
+        都拿不到才返回 None（调用方会提示用户「未识别到 @ 目标」）。
+
+        代价：第 3/4 层是对整个 kwargs 做正则，极端情况下可能误判；
+        所以它只在前两层失败后才执行，正常消息走不到那里。
+        """
         # 1. Parse MaiBot's message['raw_message'] list
         msg_obj = kwargs.get("message")
         if isinstance(msg_obj, dict):
@@ -159,14 +183,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         return False
 
     def _is_forced_user(self, sender_qq: str) -> bool:
-        cfg = self.config.partner_game
-        if not cfg.forced_wives:
-            return False
-        for rule in cfg.forced_wives:
-            parts = rule.replace("：", ":").replace("=", ":").split(":")
-            if len(parts) == 2 and parts[0].strip() == str(sender_qq):
-                return True
-        return False
+        """是否命中 forced_wives 黑幕名单（命中后所有犯罪胜率锁 0）。"""
+        return str(sender_qq) in parse_forced_rules(self.config.partner_game.forced_wives)
 
     async def _resolve_bot_qq(self) -> Optional[str]:
         if self._bot_qq_cache:
@@ -326,6 +344,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         return None
 
     def _get_user_data(self, group_id: str, qq: str) -> dict:
+        """取（必要时创建）用户记录，顺带发放跨周期低保。
+
+        注意这是**带副作用**的 getter：首次访问会自动建号并发低保，
+        所以"读一下数据"也会改钱。改造成纯查询时要一并改所有调用点。
+        """
         users = self._store.data.setdefault("users", {})
         grp = users.setdefault(group_id, {})
         today = B.period_key(self.config.partner_game.tz_offset_hours)
@@ -333,7 +356,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         user = grp.setdefault(qq, {"money": B.INITIAL_MONEY, "level": 0, "last_allowance": today})
         # 兼容补全
         if "money" not in user:
-            user["money"] = 1000
+            user["money"] = B.INITIAL_MONEY
         if "level" not in user:
             user["level"] = 0
             
@@ -352,7 +375,11 @@ class PartnerGamePlugin(MaiBotPlugin):
             user["level"] = level
             
     def _check_daily_limit(self, group_id: str, qq: str, action: str, limit: int) -> bool:
-        """检查今日是否超出限次，未超出则直接+1，并返回True。"""
+        """检查本周期次数：未超限就直接 +1 并返回 True。
+
+        注意它是"检查并占用"的合并操作 —— 返回 True 表示这次已经计数了。
+        所以调用点必须先做完所有前置校验，否则会出现"命令失败了但次数被消耗"。
+        """
         import asyncio
         today = B.period_key(self.config.partner_game.tz_offset_hours)
         if self._store.purge_old(today):
@@ -396,12 +423,28 @@ class PartnerGamePlugin(MaiBotPlugin):
         return False, 0
 
     def _set_penalty(self, group_id: str, sender_qq: str, command: str, penalty_seconds: int):
-        """设置额外惩罚时间（如抢老婆失败自闭 60 秒）"""
+        """把某条指令的"上次触发时间"往前推，制造一段额外冷却。
+
+        `_check_cooldown` 的判定是 `now - last < cooldown`。
+        想让"接下来 penalty 秒内都不能用"，就把 last 设成
+        `now + penalty - cooldown` —— 这样剩余时间正好是 penalty，
+        而不是 cooldown + penalty。别改成直觉写法，会多罚一个冷却周期。
+        """
         key = f"{group_id}_{sender_qq}_{command}"
         cooldown = max(0, int(self.config.partner_game.cooldown_seconds or 60))
-        # 强制封顶60秒自闭，无论传进来的 penalty_seconds 是多少
         penalty_seconds = min(penalty_seconds, B.MAX_PENALTY_SECONDS)
         self._last_action[key] = time.time() + penalty_seconds - cooldown
+
+    def _settle_fine(self, payer: dict, receiver: dict, fine: int) -> int:
+        """罚款结算：从 payer 扣 fine，按比例赔给 receiver，返回赔偿额。
+
+        剩下那部分直接蒸发 —— 这是本插件唯一的"货币回收池"。
+        扣款不会让余额变负（下限 0），所以门槛检查要在调用前做。
+        """
+        comp = int(fine * B.FINE_COMPENSATION_RATIO)
+        receiver["money"] += comp
+        payer["money"] = max(0, payer["money"] - fine)
+        return comp
 
     # /今日老婆
     @Command(
@@ -472,14 +515,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             if not self._get_user_marriage(group_id, uid):
                 candidates.append(m)
 
-        forced_wife_uid = None
-        if cfg.forced_wives:
-            for rule in cfg.forced_wives:
-                # 兼容冒号或等号分割，如 "123456:876543"
-                parts = rule.replace("：", ":").replace("=", ":").split(":")
-                if len(parts) == 2 and parts[0].strip() == sender_qq:
-                    forced_wife_uid = parts[1].strip()
-                    break
+        # 黑幕名单：命中的人抽老婆时直接指定对象，跳过随机
+        forced_wife_uid = parse_forced_rules(cfg.forced_wives).get(str(sender_qq))
         
         if forced_wife_uid:
             wife_uid = str(forced_wife_uid)
@@ -674,9 +711,6 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
             
-        if self._has_quote(kwargs):
-            return False, "Quote ignored", 0
-
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -754,9 +788,6 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
             
-        if self._has_quote(kwargs):
-            return False, "Quote ignored", 0
-
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -830,11 +861,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
             fine = random.randint(B.FORCE_FINE_MIN, B.FORCE_FINE_MAX)
-            comp = fine // 2
-            
-            target_data = self._get_user_data(group_id, target_qq)
-            target_data["money"] += comp
-            sender_data["money"] = max(0, sender_data["money"] - fine)
+            comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
                 await self._store.save()
@@ -902,9 +929,6 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
             
-        if self._has_quote(kwargs):
-            return False, "Quote ignored", 0
-
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -961,9 +985,6 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
             
-        if self._has_quote(kwargs):
-            return False, "Quote ignored", 0
-
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1014,35 +1035,28 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         husband_nick = await self._get_member_nick(group_id, husband_qq)
             
-        # 确保有足够的罚款金币
+        # 门槛：掏不起罚款就不许抢
         sender_data = self._get_user_data(group_id, sender_qq)
         if sender_data["money"] < B.ROB_WIFE_GATE:
             await self._send_avatar_msg(group_id, "你的存款不足 500 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
-            
-        prob = cfg.rob_wife_probability
-        is_forced = self._is_forced_user(sender_qq)
+
+        # 防守方战力取夫妻双方较高者 —— 老婆也可能是战力大佬
         husband_data = self._get_user_data(group_id, husband_qq)
         wife_data = self._get_user_data(group_id, wife_qq)
-        affection = target_marriage.get("affection", 0)
-        
-        l1 = sender_data["level"]
-        l2 = max(husband_data["level"], wife_data["level"])
-        p1 = power(l1)
-        p2 = power(l2)
-        delta_p = p1 - p2
-        
-        if is_forced:
-            prob = 0.0
-        else:
-            # 底蕴加成和护盾扣减 (0.25%/战力差, 每 20 好感减 1%)
-            prob = prob + power_win_bonus(delta_p) - B.affection_shield(affection)
-            # 保底机制: 永远在 10% 到 90% 之间
-            prob = max(B.ROB_FLOOR, min(B.ROB_CAP, prob))
-        
-        import random
-        
-        if random.random() < prob:
+        defend_level = max(husband_data["level"], wife_data["level"])
+
+        # 唯一一份胜率公式：结算与「/抢老婆胜率」共用
+        battle = combat.resolve(
+            combat.KIND_ROB_WIFE,
+            attack_level=sender_data["level"],
+            defend_level=defend_level,
+            affection=target_marriage.get("affection", 0),
+            base_prob=cfg.rob_wife_probability,
+            forced=self._is_forced_user(sender_qq),
+        )
+
+        if random.random() < battle.final_prob:
             today = B.period_key(cfg.tz_offset_hours)
             marriages = self._store.data.setdefault("marriages", {})
             
@@ -1069,10 +1083,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
             fine = random.randint(B.ROB_WIFE_FINE_MIN, B.ROB_WIFE_FINE_MAX)
-            comp = fine // 2
-            
-            husband_data["money"] += comp
-            sender_data["money"] = max(0, sender_data["money"] - fine)
+            comp = self._settle_fine(sender_data, husband_data, fine)
             
             injury_msg = ""
             # Random chance to get injured if picking a fight and failing
@@ -1137,51 +1148,29 @@ class PartnerGamePlugin(MaiBotPlugin):
         base_prob = cfg.rob_wife_probability
         is_forced = self._is_forced_user(sender_qq)
         
-        l1 = sender_data["level"]
-        l2 = max(husband_data["level"], wife_data["level"])
-        p1 = power(l1)
-        p2 = power(l2)
-        delta_p = p1 - p2
-        
-        # Calculate modifiers
-        delta_bonus = power_win_bonus(delta_p)
-        affection_penalty = B.affection_shield(affection)
-        
-        # Absolute numbers for display
-        base_display = round(base_prob * 100, 2)
-        delta_display = round(delta_bonus * 100, 2)
-        aff_display = round(affection_penalty * 100, 2)
-        
-        if is_forced:
-            final_prob = 0.0
-            final_display = 0.0
-        else:
-            final_prob = base_prob + delta_bonus - affection_penalty
-            final_prob = max(B.ROB_FLOOR, min(B.ROB_CAP, final_prob))
-            final_display = round(final_prob * 100, 2)
+        # 与结算走同一个公式，所以这里显示的胜率一定等于实际掷骰概率
+        battle = combat.resolve(
+            combat.KIND_ROB_WIFE,
+            attack_level=sender_data["level"],
+            defend_level=max(husband_data["level"], wife_data["level"]),
+            affection=affection,
+            base_prob=base_prob,
+            forced=is_forced,
+        )
             
         target_nick = await self._get_member_nick(group_id, target_qq)
-        
-        msg = f"📊 【抢夺胜率精算 - 目标：{target_nick}】 📊\n"
-        msg += f"1. 基础胜率：{base_display}%\n"
-        
-        msg += f"2. 底蕴压制："
-        if delta_p > 0:
-            msg += f"+{delta_display}% (你战力 {p1} 高于 夫妻最高战力 {p2})\n"
-        elif delta_p < 0:
-            msg += f"{delta_display}% (你战力 {p1} 低于 夫妻最高战力 {p2})\n"
-        else:
-            msg += f"0% (双方战力持平 {p1})\n"
-            
-        msg += f"3. 恩爱护盾：-{aff_display}% (当前好感度 {affection} 点)\n"
-        
-        if is_forced:
-            msg += f"4. 特殊机制：黑幕强制锁定！\n"
-        else:
-            msg += f"4. 综合结算保底：系统锁定胜率在 10% ~ 90% 之间\n"
-            
-        msg += f"---\n"
-        msg += f"🔥 最终抢夺成功率：【{final_display}%】！"
+
+        msg = (
+            f"📊 【抢夺胜率精算 - 目标：{target_nick}】 📊\n"
+            f"1. 基础胜率：{round(base_prob * 100, 2)}%\n"
+            f"2. 底蕴压制：{battle.power_percent:+.2f}%"
+            f"（你战力 {battle.attack_power} vs 夫妻最高 {battle.defend_power}）\n"
+            f"3. 恩爱护盾：-{battle.shield_percent:.2f}%（当前好感度 {affection} 点）\n"
+            + ("4. 特殊机制：黑幕强制锁定！\n" if battle.forced
+               else f"4. 综合结算保底：锁定在 {B.ROB_FLOOR:.0%} ~ {B.ROB_CAP:.0%} 之间\n")
+            + "---\n"
+            f"🔥 最终抢夺成功率：【{battle.percent}%】！"
+        )
 
         await self._send_avatar_msg(group_id, msg, sender_qq, target_qq)
         return True, "Rob Chance Done", 2
@@ -1240,27 +1229,16 @@ class PartnerGamePlugin(MaiBotPlugin):
                 await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
-        prob = getattr(cfg, "rob_money_probability", 0.35)
-        is_forced = self._is_forced_user(sender_qq)
-        
-        l1 = sender_data["level"]
-        l2 = target_data["level"]
-        p1 = power(l1)
-        p2 = power(l2)
-        delta_p = p1 - p2
-        
-        if is_forced:
-            prob = 0.0
-        else:
-            # 底蕴加成 (0.25%/战力差, 无好感护盾)
-            prob = prob + power_win_bonus(delta_p)
-            # 保底机制: 永远在 10% 到 90% 之间
-            prob = max(B.ROB_FLOOR, min(B.ROB_CAP, prob))
-        
-        import random
+        battle = combat.resolve(
+            combat.KIND_ROB_MONEY,
+            attack_level=sender_data["level"],
+            defend_level=target_data["level"],
+            base_prob=cfg.rob_money_probability,
+            forced=self._is_forced_user(sender_qq),
+        )
         target_nick = await self._get_member_nick(group_id, target_qq)
-        
-        if random.random() < prob:
+
+        if random.random() < battle.final_prob:
             # 抢走 10% ~ 25%
             ratio = random.uniform(B.ROB_MONEY_RATIO_MIN, B.ROB_MONEY_RATIO_MAX)
             stolen = int(target_data["money"] * ratio)
@@ -1277,10 +1255,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
             fine = random.randint(B.ROB_MONEY_FINE_MIN, B.ROB_MONEY_FINE_MAX)
-            comp = fine // 2
-            
-            target_data["money"] += comp
-            sender_data["money"] = max(0, sender_data["money"] - fine)
+            comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
                 await self._store.save()
@@ -1314,44 +1289,26 @@ class PartnerGamePlugin(MaiBotPlugin):
         base_prob = getattr(cfg, "rob_money_probability", 0.35)
         is_forced = self._is_forced_user(sender_qq)
         
-        l1 = sender_data["level"]
-        l2 = target_data["level"]
-        p1 = power(l1)
-        p2 = power(l2)
-        delta_p = p1 - p2
-        
-        delta_bonus = power_win_bonus(delta_p)
-        base_display = round(base_prob * 100, 2)
-        delta_display = round(delta_bonus * 100, 2)
-        
-        if is_forced:
-            final_prob = 0.0
-            final_display = 0.0
-        else:
-            final_prob = base_prob + delta_bonus
-            final_prob = max(B.ROB_FLOOR, min(B.ROB_CAP, final_prob))
-            final_display = round(final_prob * 100, 2)
+        battle = combat.resolve(
+            combat.KIND_ROB_MONEY,
+            attack_level=sender_data["level"],
+            defend_level=target_data["level"],
+            base_prob=base_prob,
+            forced=is_forced,
+        )
             
         target_nick = await self._get_member_nick(group_id, target_qq)
-        
-        msg = f"📊 【打劫胜率精算 - 目标：{target_nick}】 📊\n"
-        msg += f"1. 基础胜率：{base_display}%\n"
-        
-        msg += f"2. 底蕴压制："
-        if delta_p > 0:
-            msg += f"+{delta_display}% (你战力 {p1} 高于 对方战力 {p2})\n"
-        elif delta_p < 0:
-            msg += f"{delta_display}% (你战力 {p1} 低于 对方战力 {p2})\n"
-        else:
-            msg += f"0% (双方战力持平 {p1})\n"
-            
-        if is_forced:
-            msg += f"3. 特殊机制：黑幕强制锁定！\n"
-        else:
-            msg += f"3. 综合结算保底：系统锁定胜率在 10% ~ 90% 之间\n"
-            
-        msg += f"---\n"
-        msg += f"🔥 最终打劫成功率：【{final_display}%】！"
+
+        msg = (
+            f"📊 【打劫胜率精算 - 目标：{target_nick}】 📊\n"
+            f"1. 基础胜率：{round(base_prob * 100, 2)}%\n"
+            f"2. 底蕴压制：{battle.power_percent:+.2f}%"
+            f"（你战力 {battle.attack_power} vs 对方战力 {battle.defend_power}）\n"
+            + ("3. 特殊机制：黑幕强制锁定！\n" if battle.forced
+               else f"3. 综合结算保底：锁定在 {B.ROB_FLOOR:.0%} ~ {B.ROB_CAP:.0%} 之间\n")
+            + "---\n"
+            f"🔥 最终打劫成功率：【{battle.percent}%】！"
+        )
 
         await self._send_avatar_msg(group_id, msg, sender_qq, target_qq)
         return True, "Rob Money Chance Done", 2
