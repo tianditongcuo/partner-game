@@ -38,6 +38,8 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 | `gen_tuning.py` | 生成 `tuning.html` 交互调参面板 |
 | `deploy.py` | 一键同步到 MaiBot 的 plugins 目录（含重复 ID 检查、启用开关） |
 | `smoke_test.py` | 用桩模块导入插件，抓 `py_compile` 抓不到的名字错误 |
+| `test_rules.py` | 业务规则：劫掠金额、贷款倍数、逾期封禁、不限次语义 |
+| `test_handlers.py` | 真正执行各 handler 的成败分支，抓运行期 NameError |
 
 ## 安装到 MaiBot（重要）
 

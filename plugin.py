@@ -997,6 +997,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
             fine = random.randint(B.FORCE_FINE_MIN, B.FORCE_FINE_MAX)
+            target_data = self._get_user_data(group_id, target_qq)
             comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
@@ -1191,13 +1192,14 @@ class PartnerGamePlugin(MaiBotPlugin):
         defend_level = max(husband_data["level"], wife_data["level"])
 
         # 唯一一份胜率公式：结算与「/抢老婆胜率」共用
+        is_forced = self._is_forced_user(sender_qq)
         battle = combat.resolve(
             combat.KIND_ROB_WIFE,
             attack_level=sender_data["level"],
             defend_level=defend_level,
             affection=target_marriage.get("affection", 0),
             base_prob=cfg.rob_wife_probability,
-            forced=self._is_forced_user(sender_qq),
+            forced=is_forced,
         )
 
         if random.random() < battle.final_prob:
