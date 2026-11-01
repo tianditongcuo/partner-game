@@ -24,6 +24,7 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 | `charts/probability.svg` | 三条犯罪公式的概率曲线 | 调数值 |
 | `charts/cultivation.svg` | 修炼支出 vs 打工收入 | 调经济 |
 | `preview-*.png` | 面板截图，供 README / 群聊分享 | — |
+| `tuning.html` | **可交互调参面板**：拖滑块实时看曲线，导出可直接粘回的常量片段 | 调数值的人 |
 | `tools/` | 生成器与预检脚本 | 维护文档本身 |
 
 ## tools/
@@ -34,6 +35,8 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 | `gen_dashboard.py` | 读 `feature_map.json` 渲染 HTML / Markdown / SVG |
 | `verify_plugin.py` | 按官方 Manifest 规范离线预检「能否被 MaiBot 识别」 |
 | `_preview.py` | 用无头 Edge 给面板各分页截图（开发期自用） |
+| `gen_tuning.py` | 生成 `tuning.html` 交互调参面板 |
+| `smoke_test.py` | 用桩模块导入插件，抓 `py_compile` 抓不到的名字错误 |
 
 ## 安装到 MaiBot（重要）
 
