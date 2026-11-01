@@ -92,11 +92,26 @@ ROB_CAP = 0.90                # 抢夺/打劫的胜率钳制上限
 ROB_MONEY_GATE = 300
 ROB_MONEY_FINE_MIN = 100
 ROB_MONEY_FINE_MAX = 300
-ROB_MONEY_POOR_PROTECT = 100  # 目标资产低于此值不可被打劫
 ROB_MONEY_RATIO_MIN = 0.10    # 抢走目标资产的比例下限
 ROB_MONEY_RATIO_MAX = 0.25    # 比例上限
 ROB_MONEY_STEAL_MIN = 50      # 单次劫掠金额下限
-ROB_MONEY_STEAL_CAP = 1500    # 单次劫掠金额上限
+#: 单次劫掠不得超过受害者当前金币的这个倍数（>1 表示允许把人打成负债）
+ROB_MONEY_CAP_RATIO = 1.5
+#: 受害者资产 ≤ 0 时，单次劫掠的硬上限（保护负资产玩家不再被无限刷）
+ROB_MONEY_NEGATIVE_CAP = 100
+
+# ============================================================ 贷款
+LOAN_REPAY_MULTIPLIER = 2.0   # 还款倍数：借 100 还 200
+LOAN_GRACE_MINUTES = 15       # 逾期时限（分钟），超时后限制活动
+
+# ============================================================ 下秘境
+REALM_DIVE_LIMIT = 1             # 每周期可下秘境的次数
+REALM_DIVE_MONEY_MIN_FACTOR = 10     # 金币收益下限 = 等级 × 本值
+REALM_DIVE_MONEY_MAX_FACTOR = 10000  # 金币收益上限 = 等级 × 本值
+REALM_DIVE_GOLD_PROB = 0.70      # 获得金币
+REALM_DIVE_SURGE_PROB = 0.15     # 修为暴涨一个大境界
+REALM_DIVE_FALL_PROB = 0.10      # 修为倒退一个境界
+REALM_DIVE_DEATH_PROB = 0.05     # 陨落（修为归零、金币保留）
 
 # ============================================================ 罚款与惩罚
 FINE_COMPENSATION_RATIO = 0.5  # 罚款中赔付给对手的比例（其余蒸发）

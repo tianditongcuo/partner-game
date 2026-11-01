@@ -1,6 +1,6 @@
 """今日老婆插件配置模型。"""
 from __future__ import annotations
-from typing import ClassVar, List, Dict, Optional
+from typing import ClassVar, List, Dict, Optional, Union
 
 from pydantic import field_validator
 from maibot_sdk import Field, PluginConfigBase
@@ -130,27 +130,27 @@ class BalanceSection(PluginConfigBase):
     )
 
     # ---------------- 每周期次数 ----------------
-    draw_limit: Optional[int] = Field(
+    draw_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /今日老婆 次数（默认 1）",
-        json_schema_extra={"label": "抽老婆次数", "placeholder": "默认 1", "order": 10, "step": 1})
-    divorce_limit: Optional[int] = Field(
+        json_schema_extra={"label": "抽老婆次数", "placeholder": "默认 1；填「不限制」= 不限次", "order": 10, "step": 1})
+    divorce_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /离婚 次数（默认 1）",
-        json_schema_extra={"label": "离婚次数", "placeholder": "默认 1", "order": 11, "step": 1})
-    dump_limit: Optional[int] = Field(
+        json_schema_extra={"label": "离婚次数", "placeholder": "默认 1；填「不限制」= 不限次", "order": 11, "step": 1})
+    dump_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /甩掉 次数（默认 1）",
-        json_schema_extra={"label": "甩掉次数", "placeholder": "默认 1", "order": 12, "step": 1})
-    work_limit: Optional[int] = Field(
+        json_schema_extra={"label": "甩掉次数", "placeholder": "默认 1；填「不限制」= 不限次", "order": 12, "step": 1})
+    work_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /打工 次数（默认 3）",
-        json_schema_extra={"label": "打工次数", "placeholder": "默认 3", "order": 13, "step": 1})
-    date_limit: Optional[int] = Field(
+        json_schema_extra={"label": "打工次数", "placeholder": "默认 3；填「不限制」= 不限次", "order": 13, "step": 1})
+    date_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /约会 次数（默认 3）",
-        json_schema_extra={"label": "约会次数", "placeholder": "默认 3", "order": 14, "step": 1})
-    cultivate_limit: Optional[int] = Field(
+        json_schema_extra={"label": "约会次数", "placeholder": "默认 3；填「不限制」= 不限次", "order": 14, "step": 1})
+    cultivate_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /修炼 次数（默认 3）",
-        json_schema_extra={"label": "修炼次数", "placeholder": "默认 3", "order": 15, "step": 1})
-    rob_money_limit: Optional[int] = Field(
+        json_schema_extra={"label": "修炼次数", "placeholder": "默认 3；填「不限制」= 不限次", "order": 15, "step": 1})
+    rob_money_limit: Optional[Union[int, str]] = Field(
         default=None, description="每周期可用的 /打劫 次数（默认 3）",
-        json_schema_extra={"label": "打劫次数", "placeholder": "默认 3", "order": 16, "step": 1})
+        json_schema_extra={"label": "打劫次数", "placeholder": "默认 3；填「不限制」= 不限次", "order": 16, "step": 1})
 
     # ---------------- 门槛 ----------------
     force_gate: Optional[int] = Field(
@@ -219,6 +219,56 @@ class BalanceSection(PluginConfigBase):
     date_aff_max: Optional[int] = Field(
         default=None, description="约会好感增加上限（默认 20）",
         json_schema_extra={"label": "约会好感上限", "placeholder": "默认 20", "order": 55, "step": 1})
+
+    # ---------------- 打劫上限 ----------------
+    rob_money_cap_ratio: Optional[float] = Field(
+        default=None,
+        description="单次打劫最多抢走受害者当前金币的多少倍；>1 表示允许把对方打成负债（默认 1.5）",
+        json_schema_extra={"label": "打劫上限倍数", "placeholder": "默认 1.5", "order": 24, "step": 0.1})
+    rob_money_negative_cap: Optional[int] = Field(
+        default=None,
+        description="受害者资产 ≤ 0 时，单次打劫的金额上限（默认 100）",
+        json_schema_extra={"label": "负资产打劫上限", "placeholder": "默认 100", "order": 25, "step": 10})
+
+    # ---------------- 贷款 ----------------
+    loan_repay_multiplier: Optional[float] = Field(
+        default=None,
+        description="还款倍数：借 100 需还 100×本值（默认 2.0）",
+        json_schema_extra={"label": "还款倍数", "placeholder": "默认 2.0", "order": 26, "step": 0.1})
+    loan_grace_minutes: Optional[int] = Field(
+        default=None,
+        description="贷款逾期时限（分钟），超时后只能打工/下秘境/还贷/被动收钱（默认 15）",
+        json_schema_extra={"label": "贷款时限（分钟）", "placeholder": "默认 15", "order": 27, "step": 5})
+
+    # ---------------- 下秘境 ----------------
+    realm_dive_limit: Optional[Union[int, str]] = Field(
+        default=None,
+        description="每周期可下秘境的次数（默认 1；填「不限制」= 不限次）",
+        json_schema_extra={"label": "秘境次数", "placeholder": "默认 1；填「不限制」= 不限次", "order": 28, "step": 1})
+    realm_dive_money_min_factor: Optional[int] = Field(
+        default=None,
+        description="金币收益下限 = 境界等级 × 本值（默认 10）",
+        json_schema_extra={"label": "秘境金币下限系数", "placeholder": "默认 10", "order": 80, "step": 10})
+    realm_dive_money_max_factor: Optional[int] = Field(
+        default=None,
+        description="金币收益上限 = 境界等级 × 本值（默认 10000）",
+        json_schema_extra={"label": "秘境金币上限系数", "placeholder": "默认 10000", "order": 81, "step": 500})
+    realm_dive_gold_prob: Optional[float] = Field(
+        default=None,
+        description="下秘境获得金币的概率（默认 0.70）",
+        json_schema_extra={"label": "秘境·得金币", "placeholder": "默认 0.70", "order": 82, "step": 0.05})
+    realm_dive_surge_prob: Optional[float] = Field(
+        default=None,
+        description="下秘境修为暴涨一个大境界的概率（默认 0.15）",
+        json_schema_extra={"label": "秘境·暴涨", "placeholder": "默认 0.15", "order": 83, "step": 0.05})
+    realm_dive_fall_prob: Optional[float] = Field(
+        default=None,
+        description="下秘境修为倒退一个大境界的概率（默认 0.10）",
+        json_schema_extra={"label": "秘境·倒退", "placeholder": "默认 0.10", "order": 84, "step": 0.05})
+    realm_dive_death_prob: Optional[float] = Field(
+        default=None,
+        description="下秘境陨落的概率：修为归零、金币保留（默认 0.05）",
+        json_schema_extra={"label": "秘境·陨落", "placeholder": "默认 0.05", "order": 85, "step": 0.01})
 
     # ---------------- 概率边界与护盾 ----------------
     rob_floor: Optional[float] = Field(

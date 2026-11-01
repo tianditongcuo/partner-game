@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 import random
 from typing import Optional
@@ -414,6 +415,11 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         注意它是"检查并占用"的合并操作 —— 返回 True 表示这次已经计数了。
         所以调用点必须先做完所有前置校验，否则会出现"命令失败了但次数被消耗"。
+
+        limit 支持三种取值：
+          - 正整数：每周期最多这么多次
+          - 0：完全禁用
+          - 字符串（如「不限制」）或负数：不限次，但仍然计入 daily_usage 供统计
         """
         import asyncio
         today = B.period_key(self.config.partner_game.tz_offset_hours)
@@ -425,6 +431,12 @@ class PartnerGamePlugin(MaiBotPlugin):
                     m_info["affection"] = m_info.get("affection", 0) + B.MARRIAGE_AFFECTION_PER_CYCLE
             if self.config.partner_game.persist_enabled:
                 asyncio.create_task(self._store.save())
+
+        # 「不限制」：字符串或负数都视为无限次（0 表示禁用，不能算无限）
+        if isinstance(limit, str) or (isinstance(limit, int) and limit < 0):
+            usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
+            usage[action] = usage.get(action, 0) + 1     # 仍计数，/我的状态 能看到用了多少次
+            return True
 
         # 某些操作如果是白名单则豁免
         if action in ["partner_game", "divorce", "dump"]:
@@ -470,6 +482,79 @@ class PartnerGamePlugin(MaiBotPlugin):
         penalty_seconds = min(penalty_seconds, B.MAX_PENALTY_SECONDS)
         self._last_action[key] = time.time() + penalty_seconds - cooldown
 
+    def _calc_steal_amount(self, victim_money: int) -> int:
+        """算出一次成功打劫能抢走多少金币（允许把对方打成负债）。
+
+        规则：
+          1. 正常有存款：按 10%~25% 抢，且不超过「现有金币 × 上限倍数」
+             （倍数 > 1 才能抢出负债，默认 1.5）；
+          2. 抢掠下限（默认 50）在封顶之后再兜底 —— 所以身上只剩 10 金币的人
+             也会被抢走 50，从而变成 -40；
+          3. 资产 ≤ 0 的人：只按负资产保护上限抢（默认 100），避免被无限刷。
+        """
+        if victim_money <= 0:
+            return B.ROB_MONEY_NEGATIVE_CAP
+
+        ratio = random.uniform(B.ROB_MONEY_RATIO_MIN, B.ROB_MONEY_RATIO_MAX)
+        amount = int(victim_money * ratio)
+        cap = int(victim_money * B.ROB_MONEY_CAP_RATIO)
+        amount = min(amount, cap)
+        return max(B.ROB_MONEY_STEAL_MIN, amount)
+
+    # ---------------- 贷款 ----------------
+    def _loan_of(self, user: dict):
+        """取出未还清的贷款记录；没有则返回 None。"""
+        loan = user.get("loan")
+        return loan if isinstance(loan, dict) and loan.get("principal") else None
+
+    def _loan_owed(self, user: dict) -> int:
+        """需要偿还的总额（本金 × 还款倍数）。"""
+        loan = self._loan_of(user)
+        if not loan:
+            return 0
+        return int(loan["principal"] * B.LOAN_REPAY_MULTIPLIER)
+
+    def _loan_overdue(self, user: dict) -> bool:
+        """是否已经逾期（超过 grace 分钟未还）。"""
+        loan = self._loan_of(user)
+        if not loan:
+            return False
+        age = time.time() - float(loan.get("borrowed_at", 0))
+        return age > B.LOAN_GRACE_MINUTES * 60
+
+    def _message_text(self, kwargs) -> str:
+        """取出消息纯文本（兼容 processed_plain_text / raw_message 段 / 兜底字段）。"""
+        msg = kwargs.get("message")
+        if isinstance(msg, dict):
+            text = str(msg.get("processed_plain_text") or "")
+            if text:
+                return text
+            raw = msg.get("raw_message")
+            if isinstance(raw, list):
+                joined = "".join(
+                    str(seg.get("data", {}).get("text", ""))
+                    for seg in raw
+                    if isinstance(seg, dict) and seg.get("type") == "text"
+                )
+                if joined:
+                    return joined
+        return str(kwargs.get("raw_message", ""))
+
+    def _parse_amount(self, kwargs):
+        """取消息里的最后一个整数，用作金额。取不到返回 None。"""
+        nums = re.findall(r"-?\d+", self._message_text(kwargs))
+        return int(nums[-1]) if nums else None
+
+    def _loan_block(self, group_id: str, qq: str, action: str = "") -> bool:
+        """逾期期间的限制：只允许打工 / 下秘境 / 还贷。
+
+        返回 True 表示这次操作应当被拦下（调用方负责发提示）。
+        """
+        if action in ("work", "realm_dive", "repay"):
+            return False
+        user = self._get_user_data(group_id, qq)
+        return self._loan_overdue(user)
+
     def _settle_fine(self, payer: dict, receiver: dict, fine: int) -> int:
         """罚款结算：从 payer 扣 fine，按比例赔给 receiver，返回赔偿额。
 
@@ -492,6 +577,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("好像是私聊呢，去群聊里找你的老婆吧。", stream_id)
             return True, "好像是私聊呢，去群聊里找你的老婆吧。", 2
@@ -629,6 +718,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("只能在群里离婚喔～", stream_id)
             return True, "只能在群里离婚喔～", 2
@@ -747,6 +840,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
@@ -824,6 +921,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
@@ -965,6 +1066,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
@@ -1021,6 +1126,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
@@ -1218,6 +1327,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
             return True, "Not in group", 2
@@ -1246,11 +1359,6 @@ class PartnerGamePlugin(MaiBotPlugin):
         sender_data = self._get_user_data(group_id, sender_qq)
         target_data = self._get_user_data(group_id, target_qq)
         
-        # 保护低保户
-        if target_data["money"] < B.ROB_MONEY_POOR_PROTECT:
-            await self._send_avatar_msg(group_id, "对方穷得叮当响（资产低于100），你实在下不去手！", sender_qq, "")
-            return True, "Target too poor", 2
-            
         # 确保有足够的罚款金币
         if sender_data["money"] < B.ROB_MONEY_GATE:
             await self._send_avatar_msg(group_id, "你的存款不足 300 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
@@ -1274,13 +1382,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         target_nick = await self._get_member_nick(group_id, target_qq)
 
         if random.random() < battle.final_prob:
-            # 抢走 10% ~ 25%
-            ratio = random.uniform(B.ROB_MONEY_RATIO_MIN, B.ROB_MONEY_RATIO_MAX)
-            stolen = int(target_data["money"] * ratio)
-            stolen = max(B.ROB_MONEY_STEAL_MIN, min(B.ROB_MONEY_STEAL_CAP, stolen))
-            # 不超过目标实际拥有
-            stolen = min(target_data["money"], stolen)
-            
+            stolen = self._calc_steal_amount(target_data["money"])
+
             target_data["money"] -= stolen
             sender_data["money"] += stolen
             
@@ -1377,6 +1480,11 @@ class PartnerGamePlugin(MaiBotPlugin):
             "11. /约会：花金币陪伴侣，提升好感度（每日3次）。\n"
             "12. /上交存款 <金额>：将你的金币上交给伴侣。\n"
             "13. /我的状态：查看个人境界、金币与次数。\n"
+            "【天道借贷与馈赠】\n"
+            f"14. /贷款 <金额>：向天道借钱，{B.LOAN_GRACE_MINUTES} 分钟内须还 {B.LOAN_REPAY_MULTIPLIER} 倍，逾期封禁行动。\n"
+            "15. /还贷：一次性结清债务（不支持分期）。\n"
+            "16. /送钱 @某人 <金额>：直接给对方转账。\n"
+            "17. /下秘境：赌一把机缘，可能得金币、暴涨、倒退甚至陨落。\n"
             "【群排行榜】\n"
             "14. /战力榜：查看本群修仙大能。\n"
             "15. /财富榜：查看本群首富。\n"
@@ -1436,6 +1544,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
@@ -1485,6 +1597,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             return True, "Not in group", 2
             
@@ -1562,10 +1678,17 @@ class PartnerGamePlugin(MaiBotPlugin):
         else:
             msg += "伴侣：单身贵族\n"
             
+        loan = self._loan_of(user_data)
+        if loan:
+            owed = self._loan_owed(user_data)
+            left = B.LOAN_GRACE_MINUTES * 60 - (time.time() - float(loan.get("borrowed_at", 0)))
+            state = "已逾期（行动被封禁）" if left <= 0 else "剩余 %d 分钟" % int(left // 60)
+            msg += f"\n天道债务：本金 {loan['principal']}，需还 {owed}（{state}）\n"
+
         usage = self._store.data.get("daily_usage", {}).get(group_id, {}).get(sender_qq, {})
-        msg += f"\n今日已打工：{usage.get('work', 0)}/3\n"
-        msg += f"今日已修炼：{usage.get('cultivate', 0)}/3\n"
-        msg += f"今日已约会：{usage.get('date', 0)}/3\n"
+        msg += f"\n本周期已打工：{usage.get('work', 0)}/{B.WORK_LIMIT}\n"
+        msg += f"本周期已修炼：{usage.get('cultivate', 0)}/{B.CULTIVATE_LIMIT}\n"
+        msg += f"本周期已约会：{usage.get('date', 0)}/{B.DATE_LIMIT}\n"
         
         await self._send_avatar_msg(group_id, msg, sender_qq, sender_qq)
         return True, "Status done", 2
@@ -1579,6 +1702,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
@@ -1871,6 +1998,189 @@ class PartnerGamePlugin(MaiBotPlugin):
         )
         await self._send_forward_msg(group_id, sender_qq, "游戏机制详细说明", info_text)
         return True, "Game info", 2
+
+
+    # ---------------- 贷款 / 还贷 ----------------
+    @Command("loan", pattern=r"^\s*(?:/贷款|贷款)\s+\d+$")
+    async def handle_loan(self, stream_id: str = "", **kwargs):
+        """向天道贷款：金额自定、不设上限，但必须按倍数一次性还清。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        amount = self._parse_amount(kwargs)
+        if not amount or amount <= 0:
+            await self._send_avatar_msg(group_id, "贷款金额需要是正整数，例如【/贷款 800】。", sender_qq, "")
+            return True, "Invalid amount", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        loan = self._loan_of(user)
+        if loan:
+            awaited = self._loan_owed(user)
+            await self._send_avatar_msg(
+                group_id,
+                f"你还有一笔贷款没还清（本金 {loan['principal']}，需还 {awaited}），天道不批新的贷款。",
+                sender_qq, "")
+            return True, "Has loan", 2
+
+        user["money"] += amount
+        user["loan"] = {"principal": amount, "borrowed_at": time.time()}
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        owed = int(amount * B.LOAN_REPAY_MULTIPLIER)
+        await self._send_avatar_msg(
+            group_id,
+            f"天道垂怜，你借得 {amount} 金币，当前余额 {user['money']}。\n"
+            f"须在 {B.LOAN_GRACE_MINUTES} 分钟内一次性偿还 {owed} 金币（{B.LOAN_REPAY_MULTIPLIER} 倍），"
+            f"逾期将被封禁一切行动，只能打工、下秘境、还贷。",
+            sender_qq, "")
+        return True, "Loan granted", 2
+
+    @Command("repay", pattern=r"^\s*(?:/还贷|还贷)$")
+    async def handle_repay(self, stream_id: str = "", **kwargs):
+        """全额还贷：不分期，一次还清。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        loan = self._loan_of(user)
+        if not loan:
+            await self._send_avatar_msg(group_id, "你并不欠天道什么。", sender_qq, "")
+            return True, "No loan", 2
+
+        owed = self._loan_owed(user)
+        if user["money"] < owed:
+            await self._send_avatar_msg(
+                group_id,
+                f"还贷需要一次性结清 {owed} 金币，你只有 {user['money']}，"
+                f"还差 {owed - user['money']}。天道不接受分期。",
+                sender_qq, "")
+            return True, "Not enough", 2
+
+        user["money"] -= owed
+        user.pop("loan", None)
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        await self._send_avatar_msg(
+            group_id,
+            f"你向天道结清了 {owed} 金币，债务两清，行动解封。当前余额 {user['money']}。",
+            sender_qq, "")
+        return True, "Repaid", 2
+
+    # ---------------- 送钱 ----------------
+    @Command("give_money", pattern=r"^\s*(?:/送钱|送钱)(?:\s+|\[CQ:at|@|\d|$).*")
+    async def handle_give_money(self, stream_id: str = "", **kwargs):
+        """/送钱 @某人 金额：点对点转账，不需要是伴侣关系。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        if self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，不能往外送钱。先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
+        is_cd, remaining = self._check_cooldown(group_id, sender_qq, "give_money")
+        if is_cd:
+            await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {remaining} 秒后再试~", sender_qq, "")
+            return True, "cooldown", 2
+
+        target_qq = self._extract_at_qq(kwargs)
+        amount = self._parse_amount(kwargs)
+        if not target_qq:
+            await self._send_avatar_msg(group_id, "你想送给谁？请 @ 对方，例如【/送钱 @张三 100】。", sender_qq, "")
+            return True, "No target", 2
+        if target_qq == sender_qq:
+            await self._send_avatar_msg(group_id, "给自己送钱并不能凭空生钱。", sender_qq, "")
+            return True, "Self", 2
+        if not amount or amount <= 0:
+            await self._send_avatar_msg(group_id, "金额需要是正整数，例如【/送钱 @张三 100】。", sender_qq, "")
+            return True, "Invalid amount", 2
+
+        sender = self._get_user_data(group_id, sender_qq)
+        if sender["money"] < amount:
+            await self._send_avatar_msg(group_id, f"你只有 {sender['money']} 金币，送不出 {amount}。", sender_qq, "")
+            return True, "Not enough", 2
+
+        receiver = self._get_user_data(group_id, target_qq)
+        sender["money"] -= amount
+        receiver["money"] += amount
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        nick = await self._get_member_nick(group_id, target_qq)
+        await self._send_avatar_msg(
+            group_id,
+            f"你向【{nick}({target_qq})】赠送了 {amount} 金币，当前余额 {sender['money']}。",
+            sender_qq, target_qq)
+        return True, "Given", 2
+
+    # ---------------- 下秘境 ----------------
+    @Command("realm_dive", pattern=r"^\s*(?:/下秘境|下秘境)$")
+    async def handle_realm_dive(self, stream_id: str = "", **kwargs):
+        """下秘境：按概率产出金币 / 暴涨 / 倒退 / 陨落。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        if not self._check_daily_limit(group_id, sender_qq, "realm_dive", B.REALM_DIVE_LIMIT):
+            await self._send_avatar_msg(group_id, "你本周期已经下过秘境，调息一阵再来吧。", sender_qq, "")
+            return True, "limit", 2
+
+        level = user["level"]
+        p_gold = B.REALM_DIVE_GOLD_PROB
+        p_surge = B.REALM_DIVE_SURGE_PROB
+        p_fall = B.REALM_DIVE_FALL_PROB
+        p_death = B.REALM_DIVE_DEATH_PROB
+        total = p_gold + p_surge + p_fall + p_death
+        if total <= 0:                      # 配置写坏时兜底，避免 ZeroDivision
+            total = 1.0
+        roll = random.random() * total
+
+        if roll < p_gold:
+            lo = max(1, level * B.REALM_DIVE_MONEY_MIN_FACTOR)
+            hi = max(lo, level * B.REALM_DIVE_MONEY_MAX_FACTOR)
+            gain = random.randint(lo, hi)
+            user["money"] += gain
+            msg = f"你在秘境深处寻得一处灵石矿脉，收获 {gain} 金币！当前余额 {user['money']}。"
+        elif roll < p_gold + p_surge:
+            before = level
+            user["level"] = min(MAX_LEVEL, level + 4)
+            msg = (f"秘境中偶得大能遗蜕，你吸收其道韵，修为暴涨一个大境界！"
+                   f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
+        elif roll < p_gold + p_surge + p_fall:
+            before = level
+            user["level"] = max(0, level - 4)
+            msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退一个大境界！"
+                   f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
+        else:
+            before = level
+            user["level"] = 0
+            msg = (f"秘境中天雷降下，你未能抵御、就此陨落……境界化作乌有"
+                   f"（【{realm_name(before)}】→【{realm_name(0)}】），金币侥幸留存 {user['money']}。")
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+        await self._send_avatar_msg(group_id, msg, sender_qq, "")
+        return True, "Dive done", 2
+
 
 def create_plugin():
     return PartnerGamePlugin()
