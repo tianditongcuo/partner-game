@@ -484,7 +484,7 @@ def section_economy(m):
         '<div class="callout"><b>三个结论：</b><br>'
         '1) 罚款的一半凭空消失，这是当前唯一的“货币回收池”，也是唯一抑制通胀的机制；<br>'
         '2) 打工收入线性增长（<b>+30 金币/级/天</b>），修炼支出是阶梯（每 4 级跳 <b>+150/天</b>）：'
-        '两者在 12~23 级反复交叉，<b>24 级起修炼彻底跑赢收入</b>；<br>'
+        f'两者从 <b>{_crossover()[0]} 级</b>起交叉，<b>{_crossover()[1]} 级起修炼彻底跑赢收入</b>；<br>'
         '3) 全程没有任何流水记录，出问题只能翻 JSON 猜——这条决定将来「财富体系」必须补一个 ledger。</div>'
         % (rows(src, "#22c55e", "流入"), rows(snk, "#ef4444", "流出")))
 
@@ -504,28 +504,45 @@ def section_probability(m):
         '这是三条公式里唯一的结构性差异。</p>')
 
 
+def _crossover(first_only=False):
+    """修炼日支出 vs 打工日收入 的交叉点。"""
+    cost = lambda l: 3 * (R.cultivate_cost(l) if R else (l // 4 + 1) * 50)
+    inc = lambda l: 3 * (75 + 10 * l)
+    exceed = [l for l in range(MAX_LEVEL + 1) if cost(l) > inc(l)]
+    first = exceed[0] if exceed else None
+    perm = None
+    for l in range(MAX_LEVEL + 1):
+        if all(cost(k) > inc(k) for k in range(l, MAX_LEVEL + 1)):
+            perm = l
+            break
+    return first, perm
+
+
 def section_cultivation(m, sim):
     lv = list(range(0, MAX_LEVEL + 1))
-    cost_pts = [(l, 3 * ((l // 4 + 1) * 50)) for l in lv]          # 3 次/天的修炼支出
+    cost_pts = [(l, 3 * (R.cultivate_cost(l) if R else (l // 4 + 1) * 50)) for l in lv]
     inc_pts = [(l, 3 * (75 + 10 * l)) for l in lv]                  # 3 次/天的打工收入（取期望 75）
     s1 = {"name": "修炼日支出（3 次）", "color": "#ef4444", "points": cost_pts}
     s2 = {"name": "打工日收入（3 次，期望）", "color": "#22c55e", "points": inc_pts}
-    chart = line_chart([s1, s2], 0, 35, 0, 1500, x_label="境界等级", y_label="金币 / 天",
+    ymax = max(p[1] for p in cost_pts + inc_pts) * 1.12
+    chart = line_chart([s1, s2], 0, MAX_LEVEL, 0, ymax, x_label="境界等级", y_label="金币 / 天",
                        y_fmt="{:,.0f}", x_fmt="{:.0f}")
     cards = (
         '<div class="stats">'
-        '<div class="stat"><span class="sv">%s</span><span class="sl">期望修炼次数（0→渡劫圆满）</span></div>'
+        '<div class="stat"><span class="sv">%s</span><span class="sl">期望修炼次数（0 → %s）</span></div>'
         '<div class="stat"><span class="sv">%s</span><span class="sl">期望总花费（金币）</span></div>'
         '<div class="stat"><span class="sv">%s</span><span class="sl">纯靠修炼的期望天数（3 次/天）</span></div>'
         '<div class="stat"><span class="sv">%d–%d</span><span class="sl">2 万次模拟的波动区间</span></div>'
         '</div>'
-        % ("{:.0f}".format(sim["attempts"]), "{:,.0f}".format(sim["money"]),
+        % ("{:.0f}".format(sim["attempts"]), (R.realm_name(R.MAX_LEVEL) if R else "满级"),
+           "{:,.0f}".format(sim["money"]),
            "{:.0f}".format(sim["days"]), sim["min_attempts"], sim["max_attempts"]))
+    first, perm = _crossover()
     return chart + (
         '<p class="note">支出是<b>阶梯</b>（每 4 级跳 150 金币/天），收入是<b>直线</b>（+30 金币/级/天），'
-        '两条线在 <b>12~23 级之间反复交叉</b>，<b>24 级起彻底入不敷出</b>：'
+        f'两条线从 <b>{first} 级</b>起首次交叉，<b>{perm} 级之后持续入不敷出</b>：'
         '此后每天 3 次修炼已经养不起，必须靠打劫 / 罚款赔偿 / 管理员发钱续命。'
-        '做「修炼体系」扩展时，这个交叉带就是数值平衡的基准线。</p>') + cards
+        '做「修炼体系」扩展时，这个交叉点就是数值平衡的基准线。</p>') + cards
 
 
 def section_penalty(m):
@@ -773,16 +790,17 @@ def build_html(m, sim):
             section_config(m)),
     ])
 
+    title = esc(m["meta"]["plugin"]) + " · 维护地图"
     return ("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-            "<title>今日老婆 Pro · 维护地图</title><style>%s</style></head><body>"
-            "<header><h1>今日老婆 Pro · 维护地图</h1>"
-            "<div class=\"sub\">partner-game v%s ｜ 由 <code>docs/tools/</code> 静态扫描生成，"
-            "重构后重新运行即可刷新</div><div class=\"chips\">%s</div></header>"
-            "<nav>%s</nav><main>%s</main>"
+            "<title>" + title + "</title><style>" + CSS + "</style></head><body>"
+            "<header><h1>" + title + "</h1>"
+            "<div class=\"sub\">partner-game v" + esc(m["meta"]["version"]) +
+            " ｜ 由 <code>docs/tools/</code> 静态扫描生成，重构后重新运行即可刷新"
+            "</div><div class=\"chips\">" + chips + "</div></header>"
+            "<nav>" + nav + "</nav><main>" + body + "</main>"
             "<footer>数据来源：AST 静态扫描 + 源码数值提取 + 蒙特卡洛模拟（2 万次）</footer>"
-            "<script>%s</script></body></html>"
-            % (CSS, esc(m["meta"]["version"]), chips, nav, body, JS))
+            "<script>" + JS + "</script></body></html>")
 
 
 # ------------------------------------------------------------------ Markdown
