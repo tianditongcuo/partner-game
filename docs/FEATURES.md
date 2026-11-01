@@ -6,7 +6,7 @@
 
 | 指标 | 值 |
 |---|---|
-| 插件 | 今日老婆 Pro (onelxzy.partner-game) |
+| 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 24 |
 | plugin.py | 1876 行 |

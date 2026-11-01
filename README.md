@@ -1,4 +1,25 @@
-# 今日老婆 Pro (partner-game)
+# 今日老婆 Pro+ (partner-game)
+
+> **本项目是 [onelxzy/partner-game](https://github.com/onelxzy/partner-game) 的维护分支（fork）**，
+> 由 [tianditongcuo](https://github.com/tianditongcuo) 维护，插件 ID 为
+> `tianditongcuo.partner-game-pro`，可与原版 `onelxzy.partner-game` 区分安装。
+> 原项目基于 [whitefox 的 wife_picker](https://github.com/whitefox20011120/wife_picker) 的基础逻辑扩展开发。
+>
+> 本分支当前**玩法与数值与原版一致**，改动集中在工程层面：修正 manifest 兼容声明、
+> 补充维护文档与依赖地图（`docs/`）。后续将在此基础上扩展
+> **财富 / 修炼体系 / 惩罚机制 / 物品** 四大系统。
+
+## 🆚 与原版的差异
+
+| 项 | 原版 `onelxzy.partner-game` | 本分支 `tianditongcuo.partner-game-pro` |
+|---|---|---|
+| 插件 ID | `onelxzy.partner-game` | `tianditongcuo.partner-game-pro` |
+| 插件名称 | 今日老婆 Pro | 今日老婆 Pro+ |
+| host 兼容区间 | `1.0.0` ~ `1.99.99`（官方不推荐） | `1.0.0` ~ `1.3.99`（按实测版本声明） |
+| `i18n.locales_path` | 指向不存在的 `_locales` 目录 | 已移除该无效声明 |
+| 维护文档 | 无 | `docs/`：功能地图、依赖矩阵、可视化面板、识别预检脚本 |
+
+> ⚠️ 两者**不能同时安装**：指令集完全重叠（都是 `/今日老婆` 等），会互相抢触发。
 
 > 基于 [whitefox 的 wife_picker](https://github.com/whitefox20011120/wife_picker) 基础逻辑扩展开发的**修仙 RPG 群聊伴侣大乱斗**互动游戏系统。不仅保留了原版的随机抽取、求婚，更加入了完整的 36 级修仙战力体系、金钱经济系统、好感度护盾机制，让你可以在群里打工赚钱、修仙突破，甚至化身黄毛凭借战力强行抢走别人的老婆！
 
@@ -19,11 +40,17 @@
 
 ## 📦 安装
 
-1. 将本插件目录放入 MaiBot 的 `plugins/` 下，建议将文件夹命名为 `partner-game`：
+### 方式一：插件市场（推荐）
+
+MaiBot WebUI → 插件页 → 搜索「今日老婆 Pro+」→ 安装。
+
+### 方式二：手动安装
+
+1. 将本仓库内容放入 MaiBot 的 `plugins/` 下，文件夹名建议为 `tianditongcuo_partner-game-pro`：
 
 ```
 plugins/
-└── partner-game/
+└── tianditongcuo_partner-game-pro/
     ├── __init__.py
     ├── _manifest.json
     ├── config.py
@@ -33,6 +60,9 @@ plugins/
 
 2. 启动（或重启）MaiBot，插件会被自动加载。
 3. 首次启动后会在插件目录下自动创建 `data/partner_game_seen.json` 用于数据持久化。
+
+> ⚠️ `_manifest.json` 必须**直接**位于插件目录根下；从 GitHub 下载 zip 解压后不要多套一层目录。
+> ⚠️ 同一插件 ID 只能存在一份目录，否则 MaiBot 会报「插件 ID 重复，已阻止加载」。
 
 ---
 

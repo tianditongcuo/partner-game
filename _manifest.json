@@ -1,15 +1,17 @@
 {
   "manifest_version": 2,
+  "id": "tianditongcuo.partner-game-pro",
   "version": "2.0.2",
-  "name": "今日老婆 Pro",
-  "description": "基于随机抽签演化的群聊伴侣互动游戏系统（支持抽、娶、抢、甩等互动玩法）",
+  "name": "今日老婆 Pro+",
+  "description": "基于随机抽签演化的群聊伴侣互动游戏系统（支持抽、娶、抢、甩等互动玩法）。Pro+ 维护分支，持续扩展中。",
   "author": {
-    "name": "onelxzy",
-    "url": "https://github.com/onelxzy"
+    "name": "tianditongcuo",
+    "url": "https://github.com/tianditongcuo"
   },
   "license": "MIT",
   "urls": {
-    "repository": "https://github.com/onelxzy/partner-game"
+    "repository": "https://github.com/tianditongcuo/partner-game",
+    "issues": "https://github.com/tianditongcuo/partner-game/issues"
   },
   "host_application": {
     "min_version": "1.0.0",
@@ -19,6 +21,7 @@
     "min_version": "2.0.0",
     "max_version": "2.99.99"
   },
+  "plugin_type": "game",
   "dependencies": [
     {
       "type": "python_package",
@@ -35,6 +38,5 @@
     "supported_locales": [
       "zh-CN"
     ]
-  },
-  "id": "onelxzy.partner-game"
+  }
 }

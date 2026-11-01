@@ -1,7 +1,7 @@
 {
   "meta": {
-    "plugin": "今日老婆 Pro",
-    "id": "onelxzy.partner-game",
+    "plugin": "今日老婆 Pro+",
+    "id": "tianditongcuo.partner-game-pro",
     "version": "2.0.2",
     "files": {
       "plugin.py": 1876,

@@ -304,8 +304,8 @@ def main():
     total_loc = len(lines)
     model = {
         "meta": {
-            "plugin": "今日老婆 Pro",
-            "id": "onelxzy.partner-game",
+            "plugin": "今日老婆 Pro+",
+            "id": "tianditongcuo.partner-game-pro",
             "version": "2.0.2",
             "files": {f: len(read(os.path.join(PLUGIN_DIR, f)).splitlines())
                       for f in ["plugin.py", "config.py", "utils.py", "__init__.py"]},
