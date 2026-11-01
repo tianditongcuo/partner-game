@@ -36,6 +36,7 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 | `verify_plugin.py` | 按官方 Manifest 规范离线预检「能否被 MaiBot 识别」 |
 | `_preview.py` | 用无头 Edge 给面板各分页截图（开发期自用） |
 | `gen_tuning.py` | 生成 `tuning.html` 交互调参面板 |
+| `deploy.py` | 一键同步到 MaiBot 的 plugins 目录（含重复 ID 检查、启用开关） |
 | `smoke_test.py` | 用桩模块导入插件，抓 `py_compile` 抓不到的名字错误 |
 
 ## 安装到 MaiBot（重要）
