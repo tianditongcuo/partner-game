@@ -73,6 +73,8 @@ MAJOR_FAIL_DROP_RATE = 0.30  # 大境界突破失败后，再判定「走火入�
 # ============================================================ 好感护盾
 AFFECTION_PER_SHIELD = 20     # 每多少点好感抵消一档
 AFFECTION_SHIELD_RATE = 0.01  # 每档抵消的胜率（1%）
+#: 护盾的硬上限：再高的好感也只能抵消这么多，防止夫妻完全免疫抢夺
+AFFECTION_SHIELD_MAX = 0.50
 
 # ============================================================ 强娶
 FORCE_GATE = 300              # 发起所需金币门槛
@@ -100,6 +102,24 @@ ROB_MONEY_STEAL_MIN = 50      # 单次劫掠金额下限
 ROB_MONEY_CAP_RATIO = 1.5
 #: 受害者资产 ≤ 0 时，单次劫掠的硬上限（保护负资产玩家不再被无限刷）
 ROB_MONEY_NEGATIVE_CAP = 100
+
+# ============================================================ 氪金
+#: 每多少金币换 1% 的下次行动成功率（100 → 氪 1000 得 10%）
+RECHARGE_COINS_PER_PERCENT = 100
+#: 氪金加成的总上限（0.99 = 最高 99%）
+RECHARGE_CAP = 0.99
+#: 单次氪金的最低金额
+RECHARGE_MIN_AMOUNT = 100
+
+# ============================================================ 天妒 / 天罚
+#: 每周期成功突破多少次后触发「天妒」
+TIAN_DU_SUCCESS_THRESHOLD = 6
+#: 天妒惩罚：修为倒退几个大境界
+TIAN_DU_DROP_REALMS = 3
+#: 每周期犯罪（打劫/强娶/抢老婆）总次数超过多少后触发「天罚」
+TIAN_FA_CRIME_THRESHOLD = 8
+#: 天罚惩罚：扣除现有金币的比例
+TIAN_FA_MONEY_RATIO = 0.6
 
 # ============================================================ 贷款
 LOAN_REPAY_MULTIPLIER = 2.0   # 还款倍数：借 100 还 200
@@ -131,8 +151,12 @@ MATING_TIMEOUT_SECONDS = 120   # 交配申请的有效期（秒）
 
 
 def affection_shield(affection: int) -> float:
-    """好感度提供的胜率减免（正值，调用方自行相减）。"""
-    return (int(affection or 0) // AFFECTION_PER_SHIELD) * AFFECTION_SHIELD_RATE
+    """好感度提供的胜率减免（正值，调用方自行相减）。
+
+    受 AFFECTION_SHIELD_MAX 硬上限约束 —— 好感堆到天上去，也最多抵掉这么多。
+    """
+    raw = (int(affection or 0) // AFFECTION_PER_SHIELD) * AFFECTION_SHIELD_RATE
+    return min(raw, AFFECTION_SHIELD_MAX)
 
 
 def shield_steps(affection: int) -> int:

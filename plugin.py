@@ -27,6 +27,12 @@ from .utils import PersistStore, fetch_avatar_base64, format_user_display
 #: balance 模块的出厂默认值快照。
 #: WebUI 的「数值平衡」留空时，用它把被覆盖过的值还原回去 ——
 #: 没有这份快照，改过一次就再也找不到原值了。
+#: 数值平衡的各个配置分组（顺序无关，只用于遍历）
+_BALANCE_SECTIONS = (
+    "balance_cycle", "balance_economy", "balance_cultivation", "balance_crime",
+    "balance_penalty", "balance_social", "balance_explore", "balance_loan",
+)
+
 _BALANCE_DEFAULTS = {
     name: getattr(B, name)
     for name in dir(B)
@@ -89,14 +95,20 @@ class PartnerGamePlugin(MaiBotPlugin):
         为什么不逐个改成 self.config 调用：数值散落在 47 处 B.XXX，
         改调用点既容易漏、又要改 47 次。把模块属性改掉，所有调用点自动生效。
         """
-        section = getattr(self.config, "balance", None)
-        if section is None:          # 老配置没有这一段
-            return
+        # 数值分散在 8 个分组里：先收集所有分组的非空值，再统一写回
+        effective = {}
+        for sec_name in _BALANCE_SECTIONS:
+            section = getattr(self.config, sec_name, None)
+            if section is None:
+                continue
+            for name in _BALANCE_DEFAULTS:
+                value = getattr(section, name.lower(), None)
+                if value is not None:
+                    effective[name.lower()] = value
 
         changed = []
         for name, default in _BALANCE_DEFAULTS.items():
-            value = getattr(section, name.lower(), None)
-            target = default if value is None else value
+            target = effective.get(name.lower(), default)
             if getattr(B, name) != target:
                 setattr(B, name, target)
                 changed.append("%s=%s" % (name, target))
@@ -556,6 +568,76 @@ class PartnerGamePlugin(MaiBotPlugin):
         user = self._get_user_data(group_id, qq)
         return self._loan_overdue(user)
 
+    # ---------------- 氪金 ----------------
+    def _add_recharge(self, user: dict, amount: int) -> float:
+        """把金币换成「下次行动加成」，返回本次新增的加成比例。
+
+        换算：每 RECHARGE_COINS_PER_PERCENT 金币 = 1%，总加成不超过 RECHARGE_CAP。
+        """
+        gain = amount / float(B.RECHARGE_COINS_PER_PERCENT) / 100.0
+        total = min(B.RECHARGE_CAP, float(user.get("recharge", 0) or 0) + gain)
+        user["recharge"] = total
+        return total - gain
+
+    def _take_recharge(self, user: dict) -> float:
+        """取出并清空待用的氪金加成（一次性）。"""
+        bonus = float(user.get("recharge", 0) or 0)
+        if bonus:
+            user.pop("recharge", None)
+        return bonus
+
+    # ---------------- 天妒 / 天罚 ----------------
+    def _bump_counter(self, group_id: str, qq: str, key: str) -> int:
+        """给本周期计数器 +1 并返回新值（存于 daily_usage，跨周期自动清零）。"""
+        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
+        usage[key] = usage.get(key, 0) + 1
+        return usage[key]
+
+    def _flag(self, group_id: str, qq: str, key: str) -> bool:
+        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
+        return bool(usage.get(key))
+
+    def _set_flag(self, group_id: str, qq: str, key: str) -> None:
+        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
+        usage[key] = True
+
+    def _check_tian_du(self, group_id: str, qq: str, user: dict):
+        """修炼成功后调用：本周期突破达到阈值则「天妒」，修为倒退若干大境界。
+
+        返回提示文案，未触发返回 None。每周期仅一次。
+        """
+        threshold = B.TIAN_DU_SUCCESS_THRESHOLD
+        if threshold <= 0 or self._flag(group_id, qq, "tian_du_fired"):
+            return None
+        count = self._bump_counter(group_id, qq, "cultivate_success")
+        if count < threshold:
+            return None
+
+        self._set_flag(group_id, qq, "tian_du_fired")
+        before = user["level"]
+        drop = int(B.TIAN_DU_DROP_REALMS) * 4
+        user["level"] = max(0, before - drop)
+        return ("\n\n⚡ 天妒降下！你今日连破 %d 境，天道不容，"
+                "修为倒退 %d 个大境界（【%s】→【%s】）。" %
+                (count, B.TIAN_DU_DROP_REALMS, realm_name(before), realm_name(user["level"])))
+
+    def _check_tian_fa(self, group_id: str, qq: str, user: dict):
+        """每次犯罪后调用：本周期犯罪次数超过阈值则「天罚」，扣现有金币。"""
+        threshold = B.TIAN_FA_CRIME_THRESHOLD
+        if threshold <= 0 or self._flag(group_id, qq, "tian_fa_fired"):
+            return None
+        count = self._bump_counter(group_id, qq, "crime_count")
+        if count <= threshold:
+            return None
+
+        self._set_flag(group_id, qq, "tian_fa_fired")
+        before = user["money"]
+        lost = int(max(0, before) * B.TIAN_FA_MONEY_RATIO)
+        user["money"] = before - lost
+        return ("\n\n⚡ 天罚降临！你今日作恶 %d 次，天道不容，"
+                "扣除现有金币的 %d%%（-%d，余额 %d）。" %
+                (count, int(B.TIAN_FA_MONEY_RATIO * 100), lost, user["money"]))
+
     def _calc_fine(self, payer_money: int) -> int:
         """按行动者身家算罚款：下限 FINE_FLOOR，上限 现有金币 × FINE_CAP_RATIO。
 
@@ -988,7 +1070,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             prob = 0.0
             
         prob = max(B.FORCE_FLOOR, min(B.FORCE_CAP, prob))
-            
+        prob = min(B.RECHARGE_CAP, prob + self._take_recharge(sender_data))   # 氪金加成
+
         if random.random() < prob:
             target_nick = await self._get_member_nick(group_id, target_qq)
             today = B.period_key(cfg.tz_offset_hours)
@@ -1017,6 +1100,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             self._set_penalty(group_id, sender_qq, "force_marry", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
             
+        tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
+        if tian_fa:
+            await self._send_avatar_msg(group_id, tian_fa, sender_qq, "")
         return True, "Force Marry Done", 2
 
     @Command("my_partner", pattern=r"^\s*(?:/我的伴侣|我的伴侣)(?:\s+|\[CQ:at|@|\d|$).*")
@@ -1204,6 +1290,7 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         # 唯一一份胜率公式：结算与「/抢老婆胜率」共用
         is_forced = self._is_forced_user(sender_qq)
+        recharge = self._take_recharge(sender_data)      # 氪金：用掉即清零
         battle = combat.resolve(
             combat.KIND_ROB_WIFE,
             attack_level=sender_data["level"],
@@ -1211,6 +1298,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             affection=target_marriage.get("affection", 0),
             base_prob=cfg.rob_wife_probability,
             forced=is_forced,
+            bonus=recharge,
         )
 
         if random.random() < battle.final_prob:
@@ -1254,6 +1342,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             self._set_penalty(group_id, sender_qq, "rob_wife", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
             
+        tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
+        if tian_fa:
+            await self._send_avatar_msg(group_id, tian_fa, sender_qq, "")
         return True, "Rob Wife Done", 2
 
     @Command("rob_chance", pattern=r"^\s*(?:/抢老婆胜率|/抢夺胜率|抢老婆胜率|抢夺胜率|/抢老婆概率|/抢夺概率|抢老婆概率|抢夺概率).*")
@@ -1385,12 +1476,14 @@ class PartnerGamePlugin(MaiBotPlugin):
                 await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
+        recharge = self._take_recharge(sender_data)
         battle = combat.resolve(
             combat.KIND_ROB_MONEY,
             attack_level=sender_data["level"],
             defend_level=target_data["level"],
             base_prob=cfg.rob_money_probability,
             forced=self._is_forced_user(sender_qq),
+            bonus=recharge,
         )
         target_nick = await self._get_member_nick(group_id, target_qq)
 
@@ -1414,6 +1507,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             self._set_penalty(group_id, sender_qq, "rob_money", B.FAIL_AUTISM_SECONDS)
             await self._send_avatar_msg(group_id, f"打劫失败！【{target_nick}({target_qq})】战力爆发奋起反抗，不仅将你击退，官府还对你罚款了 {fine} 金币，并关入1分钟自闭小黑屋！\n（其中 {comp} 金币已作为正当防卫精神损失费赔偿给对方）", sender_qq, target_qq)
             
+        tian_fa = self._check_tian_fa(group_id, sender_qq, sender_data)
+        if tian_fa:
+            await self._send_avatar_msg(group_id, tian_fa, sender_qq, "")
         return True, "Rob Money Done", 2
 
     @Command("rob_money_chance", pattern=r"^\s*(?:/打劫胜率|/打劫概率|打劫胜率|打劫概率).*")
@@ -1647,12 +1743,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         is_major_breakthrough = is_major_boundary(level)
         import random
+
+        recharge = self._take_recharge(user_data)     # 氪金加成（一次性）
+        tian_du_msg = ""
         
         if is_major_breakthrough:
             # 40% success
-            if random.random() < B.MAJOR_SUCCESS_RATE:
+            if random.random() < min(B.RECHARGE_CAP, B.MAJOR_SUCCESS_RATE + recharge):
                 user_data["level"] += 1
                 msg = f"突破成功！天降祥瑞，你成功迈入了【{realm_name(user_data['level'])}】！"
+                tian_du_msg = self._check_tian_du(group_id, sender_qq, user_data) or ""
             else:
                 # Failed, 30% chance drop
                 if random.random() < B.MAJOR_FAIL_DROP_RATE and user_data["level"] > 0:
@@ -1662,16 +1762,17 @@ class PartnerGamePlugin(MaiBotPlugin):
                     msg = "突破失败！瓶颈太过坚固，你气血翻涌，未能突破。"
         else:
             # 80% success
-            if random.random() < B.MINOR_SUCCESS_RATE:
+            if random.random() < min(B.RECHARGE_CAP, B.MINOR_SUCCESS_RATE + recharge):
                 user_data["level"] += 1
                 msg = f"修炼顺利！你稳扎稳打，达到了【{realm_name(user_data['level'])}】。"
+                tian_du_msg = self._check_tian_du(group_id, sender_qq, user_data) or ""
             else:
                 msg = "修炼未果。你今日心神不宁，灵气流失，只白白消耗了丹药。"
                 
         if self.config.partner_game.persist_enabled:
             await self._store.save()
             
-        await self._send_avatar_msg(group_id, f"消耗 {cost} 金币修炼。\n{msg}", sender_qq, "")
+        await self._send_avatar_msg(group_id, f"消耗 {cost} 金币修炼。\n{msg}{tian_du_msg}", sender_qq, "")
         return True, "Cultivate done", 2
 
     @Command("status", pattern=r"^\s*(?:/我的状态|我的状态)$")
@@ -1872,28 +1973,45 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, "请通过 @ 提及你想重置的用户！", sender_qq, "")
             return True, "No target", 2
             
+        # ---- 只保留「修为」与「现有金币」，其余全部清空 ----
         marriages = self._store.data.setdefault("marriages", {})
         grp = marriages.get(group_id, {})
-        
-        # Check if target is husband
-        if target_qq in grp:
-            grp.pop(target_qq, None)
-            
-        # Check if target is wife
+
+        # 1) 解除婚姻：本人作为老公的记录
+        grp.pop(target_qq, None)
+        # 2) 解除婚姻：本人作为老婆的记录（从别人名下摘掉）
         for h_qq, w_info in list(grp.items()):
             if str(w_info.get("wife_uid")) == target_qq:
                 grp.pop(h_qq, None)
-                
-        # Clear daily usage
-        usage = self._store.data.get("daily_usage", {}).get(group_id, {}).get(target_qq, {})
-        for key in ["partner_game", "divorce", "dump"]:
-            usage.pop(key, None)
-            
+
+        # 3) 清空本周期所有行动次数（打工/修炼/约会/打劫/抽取/离婚/甩掉/交配/秘境）
+        usage_map = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {})
+        usage_map.pop(target_qq, None)
+
+        # 4) 清掉该用户身上的临时状态：贷款、氪金加成
+        user = self._get_user_data(group_id, target_qq)
+        user.pop("loan", None)
+        user.pop("recharge", None)
+
+        # 5) 清掉该用户尚未处理的申请与冷却
+        for pid, proposal in list(self.pending_proposals.items()):
+            if str(proposal.get("target_qq")) == target_qq or str(proposal.get("sender_qq")) == target_qq:
+                self.pending_proposals.pop(pid, None)
+        for key in [k for k in self.pending_mating if str(k[1]) == target_qq]:
+            self.pending_mating.pop(key, None)
+        for key in [k for k in self._last_action if k.split("_")[1:2] == [target_qq]]:
+            self._last_action.pop(key, None)
+
         if cfg.persist_enabled:
             await self._store.save()
-            
+
         target_nick = await self._get_member_nick(group_id, target_qq)
-        await self._send_avatar_msg(group_id, f"管理员操作成功！已重置【{target_nick}({target_qq})】的伴侣关系及抽取/离婚/甩掉次数！其战力与财富未受影响。", sender_qq, target_qq)
+        await self._send_avatar_msg(
+            group_id,
+            f"管理员操作成功！已重置【{target_nick}({target_qq})】：\n"
+            f"解除伴侣关系、清空本周期全部行动次数、清除贷款与氪金加成。\n"
+            f"仅保留：修为（{realm_name(user['level'])}）与现有金币（{user['money']}）。",
+            sender_qq, target_qq)
         return True, "Admin reset done", 2
 
     @Command("admin_compensate", pattern=r"^\s*(?:/全服补偿|全服补偿)\s+(\d+)$")
@@ -2303,6 +2421,51 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"两情相悦，缠绵一场~\n好感度 +{B.MATING_AFFECTION_GAIN}，当前总好感 {total}。",
             sender_qq, req["proposer"])
         return True, "Mating accepted", 2
+
+
+
+    # ---------------- 氪金 ----------------
+    @Command("recharge", pattern=r"^\s*(?:/氪金|氪金)\s+\d+$")
+    async def handle_recharge(self, stream_id: str = "", **kwargs):
+        """花金币给「下一次」行动买成功率：打劫 / 强娶 / 下秘境 / 修炼。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        amount = self._parse_amount(kwargs)
+        if not amount or amount < B.RECHARGE_MIN_AMOUNT:
+            await self._send_avatar_msg(
+                group_id, f"单次氪金至少 {B.RECHARGE_MIN_AMOUNT} 金币，例如【/氪金 {B.RECHARGE_MIN_AMOUNT}】。",
+                sender_qq, "")
+            return True, "Invalid amount", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        if user["money"] < amount:
+            await self._send_avatar_msg(group_id, f"你只有 {user['money']} 金币，氪不起 {amount}。", sender_qq, "")
+            return True, "Not enough", 2
+
+        current = float(user.get("recharge", 0) or 0)
+        if current >= B.RECHARGE_CAP:
+            await self._send_avatar_msg(group_id, "你的加成已经到顶了，先用掉再说吧。", sender_qq, "")
+            return True, "Maxed", 2
+
+        user["money"] -= amount
+        total = self._add_recharge(user, amount)
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        await self._send_avatar_msg(
+            group_id,
+            f"氪金 {amount} 成功！当前待用加成 【{round(total * 100, 2)}%】（上限 {round(B.RECHARGE_CAP * 100)}%），"
+            f"剩余金币 {user['money']}。\n"
+            f"该加成作用于下一次 /打劫、/强娶、/下秘境 或 /修炼，用掉即清零。",
+            sender_qq, "")
+        return True, "Recharged", 2
 
 
 def create_plugin():

@@ -60,6 +60,7 @@ COMMAND_DOMAIN = {
     "realm_dive": "cultivation",
     "mating_request": "marriage",
     "mating_reply": "marriage",
+    "recharge": "economy",
     "work": "economy",
     "date": "economy",
     "transfer": "economy",

@@ -150,8 +150,10 @@ def main():
             p = mod.create_plugin()
             p.ctx = SimpleNamespace(logger=_Log())
 
-            p.config = SimpleNamespace(balance=SimpleNamespace(
-                work_limit=7, cycle_hours=12, rob_cap=0.75, cultivate_cost_base=80))
+            p.config = SimpleNamespace(
+                balance_cycle=SimpleNamespace(work_limit=7, cycle_hours=12),
+                balance_crime=SimpleNamespace(rob_cap=0.75),
+                balance_cultivation=SimpleNamespace(cultivate_cost_base=80))
             p._apply_balance_overrides()
             assert pkg.balance.WORK_LIMIT == 7, pkg.balance.WORK_LIMIT
             assert pkg.balance.CYCLE_HOURS == 12
@@ -159,8 +161,7 @@ def main():
             assert pkg.realms.cultivate_cost(4) == 160, pkg.realms.cultivate_cost(4)
             print("[ OK ] 覆盖生效: WORK_LIMIT=7, CYCLE_HOURS=12, ROB_CAP=0.75, 修炼费用随系数变化")
 
-            p.config = SimpleNamespace(balance=SimpleNamespace(
-                work_limit=None, cycle_hours=None, rob_cap=None, cultivate_cost_base=None))
+            p.config = SimpleNamespace()      # 所有分组都不存在 = 全部回落到默认值
             p._apply_balance_overrides()
             assert pkg.balance.WORK_LIMIT == 3, pkg.balance.WORK_LIMIT
             assert pkg.balance.CYCLE_HOURS == 24

@@ -246,6 +246,68 @@ async def run(mod, pkg):
     ok &= (r3[0] is False)
     results.append(("普通「同意」放行", str(r3[1]), "应返回 False 交给 AI"))
 
+    # ---- 氪金：1000 金币 = +10% ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 2000, "level": 20, "last_allowance": today}
+    r = await p.handle_recharge(stream_id="", message={"processed_plain_text": "/氪金 1000"})
+    got = users["u1"].get("recharge", 0)
+    ok &= (users["u1"]["money"] == 1000 and abs(got - 0.10) < 1e-9)
+    results.append(("氪金 1000", "余额=%s 加成=%.0f%%" % (users["u1"]["money"], got * 100), "应 +10%"))
+
+    # ---- 氪金上限：99% ----
+    users["u1"]["recharge"] = 0.95
+    users["u1"]["money"] = 1000
+    r = await p.handle_recharge(stream_id="", message={"processed_plain_text": "/氪金 1000"})
+    cap = users["u1"]["recharge"]
+    ok &= abs(cap - B.RECHARGE_CAP) < 1e-9
+    results.append(("氪金封顶", "加成=%.0f%%" % (cap * 100), "应为 99%%"))
+
+    # ---- 氪金可突破常规胜率上限（90%% → 最高 99%%）----
+    low = pkg.combat.resolve(pkg.combat.KIND_ROB_MONEY, 0, 99, base_prob=0.35).final_prob
+    high = pkg.combat.resolve(pkg.combat.KIND_ROB_MONEY, 0, 99, base_prob=0.35, bonus=0.5).final_prob
+    ok &= abs(low - B.ROB_FLOOR) < 1e-9 and abs(high - 0.6) < 1e-9
+    results.append(("氪金生效", "%.0f%% → %.0f%%" % (low * 100, high * 100), "下限 10%% + 50%% = 60%%"))
+
+    # ---- 天妒：一周期成功 6 次 → 倒退 3 个大境界 ----
+    reset()
+    u = {"money": 0, "level": 40, "last_allowance": today}
+    hits = [p._check_tian_du(G, "u9", u) for _ in range(7)]
+    fired = [h for h in hits if h]
+    ok &= (len(fired) == 1 and u["level"] == 28)
+    results.append(("天妒", "触发 %d 次，40 → %d" % (len(fired), u["level"]), "应触发 1 次，-3 境界"))
+
+    # ---- 天罚：一周期犯罪 9 次 → 扣 60% 金币 ----
+    reset()
+    u2 = {"money": 1000, "level": 0, "last_allowance": today}
+    hits = [p._check_tian_fa(G, "u8", u2) for _ in range(9)]
+    fired = [h for h in hits if h]
+    ok &= (len(fired) == 1 and u2["money"] == 400)
+    results.append(("天罚", "触发 %d 次，1000 → %d" % (len(fired), u2["money"]), "应触发 1 次，-60%"))
+
+    # ---- 好感护盾硬上限 ----
+    ok &= abs(B.affection_shield(10000) - B.AFFECTION_SHIELD_MAX) < 1e-9
+    results.append(("护盾上限", "%.0f%%" % (B.affection_shield(10000) * 100), "应为 50%%"))
+
+    # ---- 管理员重置：只保留修为与金币 ----
+    reset()
+    p.config.partner_game.admin_users = ["admin9"]
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 300}}
+    users["u1"] = {"money": 777, "level": 33, "last_allowance": today,
+                   "loan": {"principal": 100, "borrowed_at": 0}, "recharge": 0.3}
+    store.data["daily_usage"].setdefault(G, {})["u1"] = {"work": 3, "cultivate": 2, "mating": 3}
+    ctx("admin9")
+    p._extract_at_qq = lambda kwargs: "u1"
+    r = await p.handle_admin_reset(stream_id="", message={"processed_plain_text": "/重置 @u1"})
+    kept = (users["u1"]["money"] == 777 and users["u1"]["level"] == 33)
+    cleared = ("loan" not in users["u1"] and "recharge" not in users["u1"]
+               and "u1" not in store.data["marriages"][G]
+               and "u1" not in store.data["daily_usage"].get(G, {}))
+    ok &= bool(kept and cleared)
+    results.append(("管理员重置", "保留 修为33/金币777" if kept else "保留了不该保留的",
+                    "清空 %s" % ("成功" if cleared else "失败")))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:
