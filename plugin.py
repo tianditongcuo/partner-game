@@ -96,20 +96,26 @@ class PartnerGamePlugin(MaiBotPlugin):
         为什么不逐个改成 self.config 调用：数值散落在 47 处 B.XXX，
         改调用点既容易漏、又要改 47 次。把模块属性改掉，所有调用点自动生效。
         """
-        # 数值分散在 8 个分组里：先收集所有分组的非空值，再统一写回
+        # 数值分散在多个分组里：收集所有字段的当前值，统一写回 balance
         effective = {}
         for sec_name in _BALANCE_SECTIONS:
             section = getattr(self.config, sec_name, None)
             if section is None:
                 continue
             for name in _BALANCE_DEFAULTS:
-                value = getattr(section, name.lower(), None)
-                if value is not None:
-                    effective[name.lower()] = value
+                if hasattr(section, name.lower()):
+                    effective[name.lower()] = getattr(section, name.lower())
 
         changed = []
         for name, default in _BALANCE_DEFAULTS.items():
             target = effective.get(name.lower(), default)
+            # 次数类允许填字符串：数字字符串转 int，"不限制" 原样保留
+            if isinstance(target, str):
+                text = target.strip()
+                if text.isdigit():
+                    target = int(text)
+                elif text == "":
+                    target = default
             if getattr(B, name) != target:
                 setattr(B, name, target)
                 changed.append("%s=%s" % (name, target))
