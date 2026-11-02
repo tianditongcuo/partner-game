@@ -400,6 +400,24 @@ async def run(mod, pkg):
     results.append(("分组迁移", "打劫=%s 秘境=%s 旧组残留=%s" % (in_money, in_dive, in_cycle),
                     "应在各自分组、① 不再包含"))
 
+    # ---- 每个行动独立的周期时长 ----
+    reset()
+    B.ROB_MONEY_CYCLE_HOURS = 1
+    B.REALM_DIVE_CYCLE_HOURS = 168
+
+    first = p._check_daily_limit(G, "uc", "rob_money", 1, cycle_hours=B.ROB_MONEY_CYCLE_HOURS)
+    second = p._check_daily_limit(G, "uc", "rob_money", 1, cycle_hours=B.ROB_MONEY_CYCLE_HOURS)
+    # 模拟"打劫周期已过去"：把该行动的周期标记改成旧值
+    store.data["daily_usage"][G]["uc"]["rob_money__period"] = "OLD"
+    third = p._check_daily_limit(G, "uc", "rob_money", 1, cycle_hours=B.ROB_MONEY_CYCLE_HOURS)
+
+    # 同一用户：打劫额度用完后，秘境（168h 周期）不受影响
+    dive_ok = p._check_daily_limit(G, "uc", "realm_dive", 1, cycle_hours=B.REALM_DIVE_CYCLE_HOURS)
+
+    ok &= bool(first and not second and third and dive_ok)
+    results.append(("独立周期", "打劫 1h：%s/%s→%s，秘境 168h：%s" % (first, second, third, dive_ok),
+                    "应 True/False/True，且秘境不受影响"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

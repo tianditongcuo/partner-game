@@ -104,10 +104,14 @@ class PersistStore:
                 logger.error(f"保存持久化失败: {e}")
 
     def purge_old(self, today: str) -> bool:
-        """跨日重置。返回是否有改动（跨日）。"""
+        """跨周期标记。返回是否跨周期（供发放好感等副作用使用）。
+
+        注意：这里**不再清空 daily_usage**。
+        每个行动的次数由 _check_daily_limit 按各自的周期时长单独判断并清零，
+        否则「打劫 168 小时一轮」会被这里的每日清空破坏。
+        """
         last_date = self.data.get("last_date", "")
         if last_date != today:
-            self.data["daily_usage"] = {}
             self.data["last_date"] = today
             return True
         return False

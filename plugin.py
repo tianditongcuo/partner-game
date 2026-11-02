@@ -430,7 +430,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         if level is not None:
             user["level"] = level
             
-    def _check_daily_limit(self, group_id: str, qq: str, action: str, limit: int) -> bool:
+    def _check_daily_limit(self, group_id: str, qq: str, action: str, limit,
+                           cycle_hours=None) -> bool:
         """检查本周期次数：未超限就直接 +1 并返回 True。
 
         注意它是"检查并占用"的合并操作 —— 返回 True 表示这次已经计数了。
@@ -440,6 +441,10 @@ class PartnerGamePlugin(MaiBotPlugin):
           - 正整数：每周期最多这么多次
           - 0：完全禁用
           - 字符串（如「不限制」）或负数：不限次，但仍然计入 daily_usage 供统计
+
+        cycle_hours：该行动自己的周期时长。传 None 表示跟随全局 CYCLE_HOURS。
+        每个 action 在 daily_usage 里存一个 "__<action>_period" 标记，
+        周期一变就把该 action 的计数清零 —— 所以打劫和秘境可以有各自的重置节奏。
         """
         import asyncio
         today = B.period_key(self.config.partner_game.tz_offset_hours)
@@ -452,9 +457,18 @@ class PartnerGamePlugin(MaiBotPlugin):
             if self.config.partner_game.persist_enabled:
                 asyncio.create_task(self._store.save())
 
+        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
+
+        # 按该行动自己的周期判断是否需要清零
+        hours = B.CYCLE_HOURS if cycle_hours is None else cycle_hours
+        slot_key = B.period_key(self.config.partner_game.tz_offset_hours, hours)
+        marker = action + "__period"
+        if usage.get(marker) != slot_key:
+            usage[action] = 0
+            usage[marker] = slot_key
+
         # 「不限制」：字符串或负数都视为无限次（0 表示禁用，不能算无限）
         if isinstance(limit, str) or (isinstance(limit, int) and limit < 0):
-            usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
             usage[action] = usage.get(action, 0) + 1     # 仍计数，/我的状态 能看到用了多少次
             return True
 
@@ -1546,7 +1560,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         cfg = self.config.partner_game
         no_limit_users = [str(x) for x in (cfg.no_limit_users or [])]
         if sender_qq not in no_limit_users:
-            if not self._check_daily_limit(group_id, sender_qq, "rob_money", B.ROB_MONEY_LIMIT):
+            if not self._check_daily_limit(group_id, sender_qq, "rob_money", B.ROB_MONEY_LIMIT,
+                               cycle_hours=B.ROB_MONEY_CYCLE_HOURS):
                 await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
@@ -2359,7 +2374,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Not in group", 2
 
         user = self._get_user_data(group_id, sender_qq)
-        if not self._check_daily_limit(group_id, sender_qq, "realm_dive", B.REALM_DIVE_LIMIT):
+        if not self._check_daily_limit(group_id, sender_qq, "realm_dive", B.REALM_DIVE_LIMIT,
+                               cycle_hours=B.REALM_DIVE_CYCLE_HOURS):
             await self._send_avatar_msg(group_id, "你本周期已经下过秘境，调息一阵再来吧。", sender_qq, "")
             return True, "limit", 2
 

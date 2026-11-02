@@ -167,6 +167,12 @@ ROB_WIFE_FINE_CAP_RATIO = 1.0
 ROB_MONEY_FINE_FLOOR = 100
 #: 打劫失败罚款上限 = 行动者现有金币 × 本值
 ROB_MONEY_FINE_CAP_RATIO = 1.0
+# ---- 周期时长：按行动独立（小时）。默认与全局 CYCLE_HOURS 一致 ----
+#: 打劫自己的周期时长；改这里只影响 /打劫 的次数重置节奏
+ROB_MONEY_CYCLE_HOURS = 24
+#: 下秘境自己的周期时长
+REALM_DIVE_CYCLE_HOURS = 24
+
 # ---- 冷却：每条指令独立，0 表示无冷却 ----
 COOLDOWN_DRAW = 60         # /今日老婆
 COOLDOWN_DIVORCE = 60      # /离婚

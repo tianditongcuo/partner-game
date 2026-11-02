@@ -310,6 +310,14 @@ class BalanceRobMoneySection(PluginConfigBase):
     __ui_label__: ClassVar[str] = "⑦ 打劫"
     __ui_order__: ClassVar[int] = 8
 
+    rob_money_cycle_hours: int = Field(
+        default=B.ROB_MONEY_CYCLE_HOURS,
+        description=(
+            "/打劫 自己的周期时长（小时）。到点后「本周期打劫次数」自动清零。\n"
+            "默认 24（每天一轮）。改成 12 就是半天一刷新，改成 168 就是一周一刷新；\n"
+            "只影响打劫，不影响打工、秘境等其他行动。"
+        ),
+        json_schema_extra={"label": "打劫周期（小时）", "placeholder": "默认 24", "order": 68, "step": 1})
     rob_money_limit: Union[int, str] = Field(
         default=B.ROB_MONEY_LIMIT,
         description=(
@@ -387,6 +395,13 @@ class BalanceExploreSection(PluginConfigBase):
     __ui_label__: ClassVar[str] = "⑨ 下秘境"
     __ui_order__: ClassVar[int] = 10
 
+    realm_dive_cycle_hours: int = Field(
+        default=B.REALM_DIVE_CYCLE_HOURS,
+        description=(
+            "/下秘境 自己的周期时长（小时）。到点后「本周期秘境次数」自动清零。\n"
+            "默认 24。只影响下秘境，不影响打劫、打工等其他行动。"
+        ),
+        json_schema_extra={"label": "秘境周期（小时）", "placeholder": "默认 24", "order": 88, "step": 1})
     realm_dive_limit: Union[int, str] = Field(
         default=B.REALM_DIVE_LIMIT,
         description=(
