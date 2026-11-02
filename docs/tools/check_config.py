@@ -3,8 +3,7 @@
 
 必须在 **MaiBot 的 Python 环境**里跑（需要 pydantic + maibot_sdk）：
 
-    "C:/Users/zhujiming/AppData/Roaming/uv/tools/maibot/Scripts/python.exe" \\
-        docs/tools/check_config.py
+    <MaiBot 自带 Python 的路径> docs/tools/check_config.py
 
 它能抓住一类很隐蔽的错误：给字段加了 ge/le 之后，默认值反而落在区间外，
 导致整份配置校验失败、WebUI 保存不了（打劫周期 0.5、打工下限 -100 就是这样翻车的）。

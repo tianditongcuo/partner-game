@@ -67,6 +67,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         self._last_action: dict = {}
         self.pending_proposals: dict = {}
         self.pending_mating: dict = {}      # (群号, 被申请人QQ) → 交配申请
+        self._member_cache: dict = {}       # 群号 → (时间戳, {QQ: 昵称})
         self._bot_qq_cache: Optional[str] = None
         try:
             self._apply_balance_overrides()   # WebUI 里改过的数值优先于 balance.py
@@ -345,16 +346,42 @@ class PartnerGamePlugin(MaiBotPlugin):
         return await self._send_napcat(int(group_id), chain)
 
 
-    async def _get_member_nick(self, group_id: str, qq: str) -> str:
-        if not qq: return "未知"
+    async def _member_map(self, group_id: str) -> dict:
+        """取「QQ → 昵称」映射，带 TTL 缓存。
+
+        之前每个昵称查询都要拉一次整份群成员列表（榜单一条指令就是 10 次网络请求），
+        这是插件"跑得慢"的主要原因。现在一个群一分钟内只拉一次。
+        """
+        key = str(group_id)
+        ttl = max(0, int(B.MEMBER_CACHE_SECONDS))
+        now = time.time()
+        cached = self._member_cache.get(key)
+        if cached and ttl and now - cached[0] < ttl:
+            return cached[1]
+
+        mapping = {}
         try:
-            members = await self.ctx.api.call("adapter.napcat.group.get_group_member_list", group_id=int(group_id), no_cache=True)
+            gid = int(group_id) if str(group_id).isdigit() else group_id
+            members = await self.ctx.api.call(
+                "adapter.napcat.group.get_group_member_list",
+                group_id=gid, no_cache=True)
             if isinstance(members, list):
                 for mem in members:
-                    if str(mem.get("user_id")) == str(qq):
-                        return mem.get("card") or mem.get("nickname") or qq
-        except Exception: pass
-        return qq
+                    uid = str(mem.get("user_id", ""))
+                    if uid:
+                        mapping[uid] = mem.get("card") or mem.get("nickname") or uid
+        except Exception:
+            pass
+
+        if mapping:                     # 拉取失败时不要把空表写进缓存
+            self._member_cache[key] = (now, mapping)
+        return mapping
+
+    async def _get_member_nick(self, group_id: str, qq: str) -> str:
+        if not qq:
+            return "未知"
+        mapping = await self._member_map(group_id)
+        return mapping.get(str(qq), str(qq))
 
     async def _send_avatar_msg(self, group_id: str, text: str, qq_to_at: str, qq_for_avatar: str) -> Optional[str]:
         chain = []
@@ -659,6 +686,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         count = self._bump_counter(group_id, qq, "cultivate_success")
         if count < threshold:
             return None
+        # 达到门槛后再掷一次"是否真的降罚"，未命中则下次继续有机会
+        if B.TIAN_DU_TRIGGER_PROB < 1.0 and random.random() >= B.TIAN_DU_TRIGGER_PROB:
+            return None
 
         self._set_flag(group_id, qq, "tian_du_fired")
         before = user["level"]
@@ -675,6 +705,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             return None
         count = self._bump_counter(group_id, qq, "crime_count")
         if count <= threshold:
+            return None
+        if B.TIAN_FA_TRIGGER_PROB < 1.0 and random.random() >= B.TIAN_FA_TRIGGER_PROB:
             return None
 
         self._set_flag(group_id, qq, "tian_fa_fired")
@@ -1521,7 +1553,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         base_prob = cfg.rob_wife_probability
         is_forced = self._is_forced_user(sender_qq)
         
-        # 与结算走同一个公式，所以这里显示的胜率一定等于实际掷骰概率
+        # 与结算走同一个公式；氪金加成单独列出，但查询不消耗它
+        pending = float(sender_data.get("recharge", 0) or 0)
         battle = combat.resolve(
             combat.KIND_ROB_WIFE,
             attack_level=sender_data["level"],
@@ -1531,6 +1564,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             forced=is_forced,
         )
             
+        battle = battle._replace(final_prob=min(B.RECHARGE_CAP, battle.final_prob + pending)) \
+            if pending else battle
         target_nick = await self._get_member_nick(group_id, target_qq)
 
         msg = (
@@ -1662,6 +1697,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         base_prob = getattr(cfg, "rob_money_probability", 0.35)
         is_forced = self._is_forced_user(sender_qq)
         
+        pending = float(sender_data.get("recharge", 0) or 0)
         battle = combat.resolve(
             combat.KIND_ROB_MONEY,
             attack_level=sender_data["level"],
@@ -1669,6 +1705,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             base_prob=base_prob,
             forced=is_forced,
         )
+        if pending:
+            battle = battle._replace(final_prob=min(B.RECHARGE_CAP, battle.final_prob + pending))
             
         target_nick = await self._get_member_nick(group_id, target_qq)
 
@@ -2441,7 +2479,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         total = p_gold + p_surge + p_fall + p_death
         if total <= 0:                      # 配置写坏时兜底，避免 ZeroDivision
             total = 1.0
+        recharge = self._take_recharge(user)     # 氪金：把结果推向更好的分支
         roll = random.random() * total
+        roll = max(0.0, roll - recharge)
 
         if roll < p_gold:
             lo = max(1, level * B.REALM_DIVE_MONEY_MIN_FACTOR)

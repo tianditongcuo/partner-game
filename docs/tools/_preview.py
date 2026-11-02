@@ -15,7 +15,9 @@ import subprocess
 import sys
 import tempfile
 
-EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+#: 无头浏览器路径，可用环境变量 EDGE_PATH 覆盖
+EDGE = os.environ.get("EDGE_PATH",
+                      r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 
 SECTIONS = [
     ("s-overview", 900),

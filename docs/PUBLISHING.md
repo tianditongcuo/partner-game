@@ -18,7 +18,7 @@
 | 必须已发布至少一个 **GitHub Release**（仅 tag 不算） | ⬜ 待办 |
 | manifest 不能有未定义字段（`categories`、`keywords` 等） | ✅ |
 
-> 校验脚本：`python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"`
+> 校验脚本：`python docs/tools/verify_plugin.py . "<你的 MaiBot 目录>/plugins"`
 
 ---
 

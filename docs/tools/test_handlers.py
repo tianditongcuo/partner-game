@@ -477,6 +477,53 @@ async def run(mod, pkg):
     results.append(("镇压·成功", "u2=%s级 u5=%s级 双双封禁=%s" % (users["u2"]["level"], users["u5"]["level"], both_banned),
                     "各 -4 级且伴侣也封禁"))
 
+    # ---- 天罚触发概率为 0 时永不触发 ----
+    reset()
+    B.TIAN_FA_TRIGGER_PROB = 0.0
+    u = {"money": 1000, "level": 0, "last_allowance": today}
+    for _ in range(12):
+        p._check_tian_fa(G, "x1", u)
+    ok &= (u["money"] == 1000)
+    results.append(("天罚概率=0", "余额=%s" % u["money"], "应保持 1000（永不触发）"))
+    B.TIAN_FA_TRIGGER_PROB = 1.0
+
+    # ---- 天妒触发概率为 0 时永不触发 ----
+    reset()
+    B.TIAN_DU_TRIGGER_PROB = 0.0
+    u2 = {"money": 0, "level": 40, "last_allowance": today}
+    for _ in range(10):
+        p._check_tian_du(G, "x2", u2)
+    ok &= (u2["level"] == 40)
+    results.append(("天妒概率=0", "等级=%s" % u2["level"], "应保持 40（永不触发）"))
+    B.TIAN_DU_TRIGGER_PROB = 1.0
+
+    # ---- 秘境会消耗氪金加成 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 1000, "level": 40, "last_allowance": today, "recharge": 0.3}
+    with patch.object(random, "random", return_value=0.0), \
+         patch.object(random, "randint", return_value=500):
+        await p.handle_realm_dive(stream_id="", message={"processed_plain_text": "/下秘境"})
+    consumed = "recharge" not in users["u1"]
+    ok &= bool(consumed)
+    results.append(("秘境吃氪金", "加成已消耗=%s" % consumed, "应被用掉"))
+
+    # ---- 成员昵称缓存：两次查询只拉一次群成员 ----
+    reset()
+    calls = {"n": 0}
+
+    async def fake_call(api_name, **kw):
+        calls["n"] += 1
+        return [{"user_id": "u1", "card": "卡片1", "nickname": "昵称1"}]
+
+    p.ctx.api = SimpleNamespace(call=fake_call)
+    p._member_cache = {}
+    m1 = await p._member_map(G)
+    m2 = await p._member_map(G)
+    ok &= (calls["n"] == 1 and m1.get("u1") == "卡片1" and m2 is m1)
+    results.append(("成员缓存", "API 调用 %d 次" % calls["n"], "两次查询应只调 1 次"))
+    p.ctx.api = None
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

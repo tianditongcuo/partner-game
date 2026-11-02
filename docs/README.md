@@ -10,7 +10,7 @@ python docs/tools/gen_dashboard.py         # ② 渲染 → dashboard.html / FEA
 插件装到 MaiBot 之前，先自检一遍能不能被识别：
 
 ```bash
-python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
+python docs/tools/verify_plugin.py . "<你的 MaiBot 目录>/plugins"
 ```
 
 ## 文件说明
@@ -64,6 +64,33 @@ python docs/tools/verify_plugin.py . "D:/Maimaibot/my-maibot/plugins"
 - 功能域归属在 `COMMAND_DOMAIN` 里人工声明，改分类只需改那张表
 
 `gen_dashboard.py` 只消费 JSON，不碰源码，所以可以随便改样式和图表。
+
+## 推送到 GitHub 前的检查
+
+仓库里**只应包含代码与文档**，以下内容不应出现（`.gitignore` 已覆盖）：
+
+| 不能提交 | 原因 |
+|---|---|
+| `config.toml` | 含部署者填写的管理员 QQ、黑名单等 |
+| `data/` | 玩家 QQ、金币、婚姻关系等真实数据 |
+| `__pycache__/`、`*.pyc` | 编译产物 |
+| `docs/_p_*.png`、`docs/_t_*.html` | 截图生成过程的临时文件 |
+
+推送前跑一遍：
+
+```bat
+git status --porcelain
+git ls-files | findstr /I "config.toml data/"
+git diff --stat            # 确认改动范围
+```
+
+前两条命令应当**没有任何输出**。若 `git ls-files` 里出现了 `config.toml` 或 `data/`，
+说明它们被误加了，执行：
+
+```bat
+git rm --cached config.toml
+git rm -r --cached data
+```
 
 ## 维护约定
 

@@ -486,6 +486,13 @@ class BalanceHeavenSection(_BalanceBase):
             "默认 6。填 0 或负数 = 关闭天妒。"
         ),
         json_schema_extra={"label": "天妒触发次数", "placeholder": "默认 6", "order": 110, "step": 1})
+    tian_du_trigger_prob: float = Field(
+        default=B.TIAN_DU_TRIGGER_PROB, ge=0, le=1,
+        description=(
+            "达到「天妒触发次数」后，实际触发天妒的概率。0~1，默认 1.0（必定触发）。\n"
+            "调低它就是「修炼爆肝也未必遭天妒」；调成 0 = 关闭天妒（等同阈值填 0）。"
+        ),
+        json_schema_extra={"label": "天妒触发概率", "placeholder": "默认 1.0", "order": 111, "step": 0.05})
     tian_du_drop_realms: int = Field(
         default=B.TIAN_DU_DROP_REALMS, description="天妒惩罚：修为倒退几个大境界（1 个 = 4 级）。默认 3。", ge=0, le=100000000,
         json_schema_extra={"label": "天妒倒退境界数", "placeholder": "默认 3", "order": 111, "step": 1})
@@ -496,6 +503,13 @@ class BalanceHeavenSection(_BalanceBase):
             "默认 8。填 0 或负数 = 关闭天罚。"
         ),
         json_schema_extra={"label": "天罚触发次数", "placeholder": "默认 8", "order": 112, "step": 1})
+    tian_fa_trigger_prob: float = Field(
+        default=B.TIAN_FA_TRIGGER_PROB, ge=0, le=1,
+        description=(
+            "达到「天罚触发次数」后，实际触发天罚的概率。0~1，默认 1.0（必定触发）。\n"
+            "调低它就是「作恶多端也未必立刻遭报应」。"
+        ),
+        json_schema_extra={"label": "天罚触发概率", "placeholder": "默认 1.0", "order": 113, "step": 0.05})
     tian_fa_money_ratio: float = Field(
         default=B.TIAN_FA_MONEY_RATIO, description="天罚惩罚：扣除现有金币的比例。默认 0.6（60%）。", ge=0, le=1,
         json_schema_extra={"label": "天罚扣钱比例", "placeholder": "默认 0.6", "order": 113, "step": 0.1})
@@ -676,6 +690,28 @@ class BalanceSuppressSection(_BalanceBase):
         json_schema_extra={"label": "失败赔付比例上限", "placeholder": "默认 0.30", "order": 150, "step": 0.01})
 
 
+class BalancePerfSection(PluginConfigBase):
+    """⑮ 性能 —— 缓存开关，网络慢的时候可以调大。"""
+
+    __ui_label__: ClassVar[str] = "⑮ 性能"
+    __ui_order__: ClassVar[int] = 16
+
+    member_cache_seconds: int = Field(
+        default=B.MEMBER_CACHE_SECONDS, ge=0, le=3600,
+        description=(
+            "群成员昵称列表的缓存秒数。榜单、昵称查询都靠它，默认 60。\n"
+            "调大 = 更快但可能显示旧昵称；填 0 = 每次都实时拉取（最慢）。"
+        ),
+        json_schema_extra={"label": "成员列表缓存（秒）", "placeholder": "默认 60", "order": 160, "step": 10})
+    avatar_cache_seconds: int = Field(
+        default=B.AVATAR_CACHE_SECONDS, ge=0, le=86400,
+        description=(
+            "QQ 头像的缓存秒数。默认 300（5 分钟）。\n"
+            "每次发头像都要联网下载，缓存后同一个人的头像不会反复拉取。"
+        ),
+        json_schema_extra={"label": "头像缓存（秒）", "placeholder": "默认 300", "order": 161, "step": 30})
+
+
 class PartnerGameConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     partner_game: PartnerGameSection = Field(default_factory=PartnerGameSection)
@@ -694,5 +730,6 @@ class PartnerGameConfig(PluginConfigBase):
     balance_beast: BalanceBeastSection = Field(default_factory=BalanceBeastSection)
     balance_bully: BalanceBullySection = Field(default_factory=BalanceBullySection)
     balance_suppress: BalanceSuppressSection = Field(default_factory=BalanceSuppressSection)
+    balance_perf: BalancePerfSection = Field(default_factory=BalancePerfSection)
 
 

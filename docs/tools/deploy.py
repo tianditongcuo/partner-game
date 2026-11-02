@@ -24,7 +24,8 @@ import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_PLUGINS = r"D:/Maimaibot/my-maibot/plugins"
+#: 默认插件目录。可用环境变量 MAIBOT_PLUGINS_DIR 覆盖，或用 --plugins-dir 指定。
+DEFAULT_PLUGINS = os.environ.get("MAIBOT_PLUGINS_DIR", "")
 
 CODE_FILES = ["plugin.py", "config.py", "utils.py", "__init__.py",
               "realms.py", "balance.py", "combat.py", "_manifest.json",
@@ -107,7 +108,8 @@ def set_enabled(target, enabled):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--plugins-dir", default=DEFAULT_PLUGINS)
+    ap.add_argument("--plugins-dir", default=DEFAULT_PLUGINS,
+                    help="MaiBot 的 plugins 目录；也可用环境变量 MAIBOT_PLUGINS_DIR")
     ap.add_argument("--no-docs", action="store_true", help="不同步 docs/")
     ap.add_argument("--enable", action="store_true", help="把 config.toml 里的 enabled 设为 true")
     ap.add_argument("--disable", action="store_true", help="把 enabled 设为 false")
@@ -122,6 +124,9 @@ def main():
     print("目标目录: %s" % target)
     print("-" * 60)
 
+    if not args.plugins_dir:
+        raise SystemExit("请用 --plugins-dir 指定 MaiBot 的 plugins 目录，"
+                         "或设置环境变量 MAIBOT_PLUGINS_DIR")
     if not os.path.isdir(args.plugins_dir):
         raise SystemExit("插件目录不存在: %s" % args.plugins_dir)
 
