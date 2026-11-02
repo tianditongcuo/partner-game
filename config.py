@@ -149,15 +149,9 @@ class BalanceCycleSection(PluginConfigBase):
     cultivate_limit: Union[int, str] = Field(
         default=B.CULTIVATE_LIMIT, description="每周期可用几次 /修炼。默认 3；「不限制」= 不限次；0 = 禁用。",
         json_schema_extra={"label": "修炼次数", "placeholder": "默认 3", "order": 15, "step": 1})
-    rob_money_limit: Union[int, str] = Field(
-        default=B.ROB_MONEY_LIMIT, description="每周期可用几次 /打劫。默认 3；「不限制」= 不限次；0 = 禁用。",
-        json_schema_extra={"label": "打劫次数", "placeholder": "默认 3", "order": 16, "step": 1})
     mating_limit: Union[int, str] = Field(
         default=B.MATING_LIMIT, description="每周期夫妻可交配几次（双方共用）。默认 3；「不限制」= 不限次。",
         json_schema_extra={"label": "交配次数", "placeholder": "默认 3", "order": 17, "step": 1})
-    realm_dive_limit: Union[int, str] = Field(
-        default=B.REALM_DIVE_LIMIT, description="每周期可下几次秘境。默认 1；「不限制」= 不限次。",
-        json_schema_extra={"label": "秘境次数", "placeholder": "默认 1", "order": 18, "step": 1})
 
 
 class BalanceEconomySection(PluginConfigBase):
@@ -316,6 +310,13 @@ class BalanceRobMoneySection(PluginConfigBase):
     __ui_label__: ClassVar[str] = "⑦ 打劫"
     __ui_order__: ClassVar[int] = 8
 
+    rob_money_limit: Union[int, str] = Field(
+        default=B.ROB_MONEY_LIMIT,
+        description=(
+            "/打劫 每个周期可用几次（这是打劫自己的周期次数，与其他行动互不影响）。\n"
+            "默认 3；填「不限制」= 不限次；填 0 = 禁止打劫。"
+        ),
+        json_schema_extra={"label": "每周期打劫次数", "placeholder": "默认 3", "order": 69, "step": 1})
     rob_money_gate: int = Field(
         default=B.ROB_MONEY_GATE, description="/打劫 需要的金币余额。默认 300。",
         json_schema_extra={"label": "金币门槛", "placeholder": "默认 300", "order": 70, "step": 50})
@@ -386,6 +387,13 @@ class BalanceExploreSection(PluginConfigBase):
     __ui_label__: ClassVar[str] = "⑨ 下秘境"
     __ui_order__: ClassVar[int] = 10
 
+    realm_dive_limit: Union[int, str] = Field(
+        default=B.REALM_DIVE_LIMIT,
+        description=(
+            "/下秘境 每个周期可用几次（这是秘境自己的周期次数，与打劫等其他行动无关）。\n"
+            "默认 1；填「不限制」= 不限次；填 0 = 禁止下秘境。"
+        ),
+        json_schema_extra={"label": "每周期秘境次数", "placeholder": "默认 1", "order": 89, "step": 1})
     realm_dive_money_min_factor: int = Field(
         default=B.REALM_DIVE_MONEY_MIN_FACTOR, description="金币收益下限 = 境界等级 × 本值。默认 10。",
         json_schema_extra={"label": "金币下限系数", "placeholder": "默认 10", "order": 90, "step": 10})
@@ -444,6 +452,13 @@ class BalanceHeavenSection(PluginConfigBase):
     tian_fa_money_ratio: float = Field(
         default=B.TIAN_FA_MONEY_RATIO, description="天罚惩罚：扣除现有金币的比例。默认 0.6（60%）。",
         json_schema_extra={"label": "天罚扣钱比例", "placeholder": "默认 0.6", "order": 113, "step": 0.1})
+    rebirth_keep_ratio: float = Field(
+        default=B.REBIRTH_KEEP_RATIO,
+        description=(
+            "重生（主动 /重生 或陨落时自动触发）后保留的修为比例。默认 0.7 = 保留 70% 等级。\n"
+            "其余一切（金币、伴侣、贷款、氪金加成、本周期次数与冷却）全部重置。"
+        ),
+        json_schema_extra={"label": "重生保留修为比例", "placeholder": "默认 0.7", "order": 109, "step": 0.05})
     realm_dive_death_prob: float = Field(
         default=B.REALM_DIVE_DEATH_PROB, description="下秘境陨落的概率：修为归零、金币保留。默认 0.05。",
         json_schema_extra={"label": "秘境·陨落概率", "placeholder": "默认 0.05", "order": 114, "step": 0.01})
@@ -451,6 +466,57 @@ class BalanceHeavenSection(PluginConfigBase):
         default=B.FINE_COMPENSATION_RATIO,
         description="所有罚款中赔付给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。",
         json_schema_extra={"label": "罚款赔付比例", "placeholder": "默认 0.5", "order": 115, "step": 0.05})
+
+
+class BalanceBeastSection(PluginConfigBase):
+    """⑫ 打怪 —— 主动挑战怪物，赌金币 / 涨修为 / 掉境界 / 陨落。
+
+    这是独立于「秘境」的另一条高风险收益线：秘境偏金币，打怪偏修为。
+    """
+
+    __ui_label__: ClassVar[str] = "⑫ 打怪"
+    __ui_order__: ClassVar[int] = 13
+
+    beast_limit: Union[int, str] = Field(
+        default=B.BEAST_LIMIT,
+        description="每周期可以打几次怪。默认 3；填「不限制」= 不限次；填 0 = 禁止打怪。",
+        json_schema_extra={"label": "每周期打怪次数", "placeholder": "默认 3", "order": 120, "step": 1})
+    cooldown_beast: int = Field(
+        default=B.COOLDOWN_BEAST,
+        description="打怪的冷却秒数。默认 60；填 0 = 无冷却。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 121, "step": 10})
+    beast_money_min_factor: int = Field(
+        default=B.BEAST_MONEY_MIN_FACTOR,
+        description="获得金币时的下限 = 当前境界等级 × 本值。默认 100。",
+        json_schema_extra={"label": "金币下限系数", "placeholder": "默认 100", "order": 122, "step": 50})
+    beast_money_max_factor: int = Field(
+        default=B.BEAST_MONEY_MAX_FACTOR,
+        description="获得金币时的上限 = 当前境界等级 × 本值。默认 5000。",
+        json_schema_extra={"label": "金币上限系数", "placeholder": "默认 5000", "order": 123, "step": 500})
+    beast_gain_levels: int = Field(
+        default=B.BEAST_GAIN_LEVELS,
+        description="修为提升时增加几级（4 级 = 1 个大境界）。默认 4。",
+        json_schema_extra={"label": "提升等级数", "placeholder": "默认 4", "order": 124, "step": 1})
+    beast_lose_levels: int = Field(
+        default=B.BEAST_LOSE_LEVELS,
+        description="境界跌落时减少几级（4 级 = 1 个大境界）。默认 4。",
+        json_schema_extra={"label": "跌落等级数", "placeholder": "默认 4", "order": 125, "step": 1})
+    beast_gold_prob: float = Field(
+        default=B.BEAST_GOLD_PROB,
+        description="打怪获得大量金币的概率。默认 0.55。四种结果合计应约等于 1。",
+        json_schema_extra={"label": "得金币概率", "placeholder": "默认 0.55", "order": 126, "step": 0.05})
+    beast_gain_prob: float = Field(
+        default=B.BEAST_GAIN_PROB,
+        description="打怪修为提升的概率。默认 0.25。",
+        json_schema_extra={"label": "修为提升概率", "placeholder": "默认 0.25", "order": 127, "step": 0.05})
+    beast_lose_prob: float = Field(
+        default=B.BEAST_LOSE_PROB,
+        description="打怪境界跌落的概率。默认 0.15。",
+        json_schema_extra={"label": "境界跌落概率", "placeholder": "默认 0.15", "order": 128, "step": 0.05})
+    beast_death_prob: float = Field(
+        default=B.BEAST_DEATH_PROB,
+        description="打怪陨落的概率。默认 0.05。陨落会自动触发重生。",
+        json_schema_extra={"label": "陨落概率", "placeholder": "默认 0.05", "order": 129, "step": 0.01})
 
 
 class PartnerGameConfig(PluginConfigBase):
@@ -468,5 +534,6 @@ class PartnerGameConfig(PluginConfigBase):
     balance_explore: BalanceExploreSection = Field(default_factory=BalanceExploreSection)
     balance_loan: BalanceLoanSection = Field(default_factory=BalanceLoanSection)
     balance_heaven: BalanceHeavenSection = Field(default_factory=BalanceHeavenSection)
+    balance_beast: BalanceBeastSection = Field(default_factory=BalanceBeastSection)
 
 

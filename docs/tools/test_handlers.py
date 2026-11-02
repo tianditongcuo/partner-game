@@ -356,6 +356,50 @@ async def run(mod, pkg):
     ok &= bool(is_cd) and rem <= B.COOLDOWN_FORCE
     results.append(("失败只剩冷却", "剩余 %ds（上限 %ds）" % (rem, B.COOLDOWN_FORCE), "不应超过冷却值"))
 
+    # ---- 打怪：四种结果 ----
+    for forced, label, expect_desc in (
+        (0.05, "打怪·金币", "金币增加"),
+        (0.65, "打怪·提升", "+4 级"),
+        (0.88, "打怪·跌落", "-4 级"),
+        (0.99, "打怪·陨落", "重生 70%"),
+    ):
+        reset()
+        ctx("u1")
+        users["u1"] = {"money": 1000, "level": 40, "last_allowance": today}
+        with patch.object(random, "random", return_value=forced), \
+             patch.object(random, "randint", return_value=5000):
+            r = await p.handle_beast(stream_id="", message={"processed_plain_text": "/打怪"})
+        u = users["u1"]
+        results.append((label, "Lv=%s 金币=%s" % (u["level"], u["money"]), expect_desc))
+        ok &= (r[1] == "Beast done")
+    # 陨落后应为 40 * 0.7 = 28 级、金币重置为初始值
+    ok &= (users["u1"]["level"] == 28 and users["u1"]["money"] == B.INITIAL_MONEY)
+
+    # ---- 主动重生：保留 70% 修为，其余重置 ----
+    reset()
+    ctx("u1")
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 500}}
+    users["u1"] = {"money": 8888, "level": 50, "last_allowance": today,
+                   "loan": {"principal": 100, "borrowed_at": 0}, "recharge": 0.4}
+    r = await p.handle_rebirth(stream_id="", message={"processed_plain_text": "/重生"})
+    u = users["u1"]
+    kept = (u["level"] == 35 and u["money"] == B.INITIAL_MONEY
+            and "loan" not in u and "recharge" not in u
+            and "u1" not in store.data["marriages"][G])
+    ok &= bool(kept)
+    results.append(("主动重生", "Lv 50→%s 金币=%s" % (u["level"], u["money"]), "应 35 级 / 初始金币"))
+
+    # ---- 配置分组迁移：打劫/秘境的次数应在各自分组里 ----
+    cfg = pkg.config
+    in_money = hasattr(cfg.BalanceRobMoneySection(), "rob_money_limit")
+    in_dive = hasattr(cfg.BalanceExploreSection(), "realm_dive_limit")
+    in_cycle = hasattr(cfg.BalanceCycleSection(), "rob_money_limit") or \
+               hasattr(cfg.BalanceCycleSection(), "realm_dive_limit")
+    ok &= bool(in_money and in_dive and not in_cycle)
+    results.append(("分组迁移", "打劫=%s 秘境=%s 旧组残留=%s" % (in_money, in_dive, in_cycle),
+                    "应在各自分组、① 不再包含"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

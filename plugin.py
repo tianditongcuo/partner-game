@@ -31,7 +31,7 @@ from .utils import PersistStore, fetch_avatar_base64, format_user_display
 _BALANCE_SECTIONS = (
     "balance_cycle", "balance_economy", "balance_cultivation", "balance_marriage",
     "balance_force", "balance_rob_wife", "balance_rob_money", "balance_social",
-    "balance_explore", "balance_loan", "balance_heaven",
+    "balance_explore", "balance_loan", "balance_heaven", "balance_beast",
 )
 
 _BALANCE_DEFAULTS = {
@@ -640,6 +640,44 @@ class PartnerGamePlugin(MaiBotPlugin):
         return ("\n\n⚡ 天罚降临！你今日作恶 %d 次，天道不容，"
                 "扣除现有金币的 %d%%（-%d，余额 %d）。" %
                 (count, int(B.TIAN_FA_MONEY_RATIO * 100), lost, user["money"]))
+
+    def _rebirth(self, group_id: str, qq: str, why: str = ""):
+        """重生：只保留 REBIRTH_KEEP_RATIO 比例的修为，其余全部重置。
+
+        用于：主动 /重生、秘境陨落、打怪陨落。
+        返回 (原等级, 重生后等级)，供文案使用。
+        """
+        user = self._get_user_data(group_id, qq)
+        before_level = user["level"]
+        kept_level = int(before_level * B.REBIRTH_KEEP_RATIO)
+
+        user["level"] = kept_level
+        user["money"] = B.INITIAL_MONEY
+        user.pop("loan", None)
+        user.pop("recharge", None)
+        user.pop("last_allowance", None)
+
+        # 解除婚姻关系（自己作为老公 / 老婆两种位置都要摘掉）
+        marriages = self._store.data.setdefault("marriages", {}).setdefault(group_id, {})
+        marriages.pop(qq, None)
+        for h_qq, info in list(marriages.items()):
+            if str(info.get("wife_uid")) == qq:
+                marriages.pop(h_qq, None)
+
+        # 清空本周期全部次数与冷却
+        self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).pop(qq, None)
+        prefix = "%s_%s_" % (group_id, qq)
+        for key in [k for k in self._last_action if k.startswith(prefix)]:
+            self._last_action.pop(key, None)
+
+        for pid, proposal in list(self.pending_proposals.items()):
+            if str(proposal.get("target_qq")) == qq or str(proposal.get("sender_qq")) == qq:
+                self.pending_proposals.pop(pid, None)
+        for key in [k for k in self.pending_mating if str(k[1]) == qq]:
+            self.pending_mating.pop(key, None)
+
+        self.ctx.logger.info("重生: %s（%s）%s → %s" % (qq, why, before_level, kept_level))
+        return before_level, kept_level
 
     def _apply_divorce_penalty(self, group_id: str, initiator: str, partner_qq: str) -> str:
         """离婚惩罚：发起方按比例把财富与修为分给对方（开关关闭时什么都不做）。
@@ -1632,6 +1670,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             "【夫妻私房】\n"
             f"18. /申请交配：好感满 {B.MATING_AFFECTION_MIN} 后向伴侣申请，对方回复「同意」/「拒绝」。\n"
             f"   每次成功可加 {B.MATING_AFFECTION_GAIN} 好感，每周期上限 {B.MATING_LIMIT} 次。\n"
+            "19. /打怪：挑战怪物，可能暴富、涨修为、掉境界甚至陨落（概率可配）。\n"
+            "20. /重生：重入轮回，只保留部分修为，其余全部重置（陨落时自动触发）。\n"
             "【群排行榜】\n"
             "14. /战力榜：查看本群修仙大能。\n"
             "15. /财富榜：查看本群首富。\n"
@@ -2350,10 +2390,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退一个大境界！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
-            before = level
-            user["level"] = 0
-            msg = (f"秘境中天雷降下，你未能抵御、就此陨落……境界化作乌有"
-                   f"（【{realm_name(before)}】→【{realm_name(0)}】），金币侥幸留存 {user['money']}。")
+            before, after = self._rebirth(group_id, sender_qq, "秘境陨落")
+            msg = (f"秘境中天雷降下，你未能抵御、就此陨落……\n"
+                   f"只能保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为重入轮回："
+                   f"【{realm_name(before)}】→【{realm_name(after)}】，其余一切重置。")
 
         if self.config.partner_game.persist_enabled:
             await self._store.save()
@@ -2505,6 +2545,96 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"该加成作用于下一次 /打劫、/强娶、/下秘境 或 /修炼，用掉即清零。",
             sender_qq, "")
         return True, "Recharged", 2
+
+
+
+    # ---------------- 打怪 ----------------
+    @Command("beast", pattern=r"^\s*(?:/打怪|打怪)$")
+    async def handle_beast(self, stream_id: str = "", **kwargs):
+        """挑战怪物：金币 / 修为提升 / 境界跌落 / 陨落。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        if self._loan_block(group_id, sender_qq):
+            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
+            return True, "loan_overdue", 2
+
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "beast", B.COOLDOWN_BEAST)
+        if is_cd:
+            await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            return True, "cooldown", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        if not self._check_daily_limit(group_id, sender_qq, "beast", B.BEAST_LIMIT):
+            await self._send_avatar_msg(group_id, "你本周期已经打够了，怪物们也需要休息。", sender_qq, "")
+            return True, "limit", 2
+
+        level = user["level"]
+        p_gold, p_gain = B.BEAST_GOLD_PROB, B.BEAST_GAIN_PROB
+        p_lose, p_death = B.BEAST_LOSE_PROB, B.BEAST_DEATH_PROB
+        total = p_gold + p_gain + p_lose + p_death
+        if total <= 0:
+            total = 1.0
+        roll = random.random() * total
+
+        if roll < p_gold:
+            lo = max(1, level * B.BEAST_MONEY_MIN_FACTOR)
+            hi = max(lo, level * B.BEAST_MONEY_MAX_FACTOR)
+            gain = random.randint(lo, hi)
+            user["money"] += gain
+            msg = f"你斩杀了一头妖兽，从其巢穴中搜刮出 {gain} 金币！当前余额 {user['money']}。"
+        elif roll < p_gold + p_gain:
+            before = user["level"]
+            user["level"] = min(MAX_LEVEL, before + B.BEAST_GAIN_LEVELS)
+            msg = (f"激战中你顿悟了一丝道韵，修为提升 {B.BEAST_GAIN_LEVELS} 级！"
+                   f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
+        elif roll < p_gold + p_gain + p_lose:
+            before = user["level"]
+            user["level"] = max(0, before - B.BEAST_LOSE_LEVELS)
+            msg = (f"你被怪物重创，狼狈逃回，修为跌落 {B.BEAST_LOSE_LEVELS} 级！"
+                   f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
+        else:
+            before, after = self._rebirth(group_id, sender_qq, "打怪陨落")
+            msg = (f"你遇上了一头远古凶兽，力竭身陨……\n"
+                   f"只能保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为重入轮回："
+                   f"【{realm_name(before)}】→【{realm_name(after)}】，其余一切重置。")
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+        await self._send_avatar_msg(group_id, msg, sender_qq, "")
+        return True, "Beast done", 2
+
+    # ---------------- 重生 ----------------
+    @Command("rebirth", pattern=r"^\s*(?:/重生|重生)$")
+    async def handle_rebirth(self, stream_id: str = "", **kwargs):
+        """主动重生：保留约定比例的修为，其余一切重置。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        before, after = self._rebirth(group_id, sender_qq, "主动重生")
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        await self._send_avatar_msg(
+            group_id,
+            f"你散去一身因果，重入轮回。\n"
+            f"仅保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为："
+            f"【{realm_name(before)}】→【{realm_name(after)}】；金币重置为 {B.INITIAL_MONEY}，"
+            f"伴侣、贷款、氪金加成与本周期次数全部清空。",
+            sender_qq, "")
+        return True, "Rebirth done", 2
 
 
 def create_plugin():

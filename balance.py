@@ -121,6 +121,22 @@ TIAN_FA_CRIME_THRESHOLD = 8
 #: 天罚惩罚：扣除现有金币的比例
 TIAN_FA_MONEY_RATIO = 0.6
 
+# ============================================================ 打怪
+BEAST_LIMIT = 3                  # 每周期可打几次怪
+COOLDOWN_BEAST = 60              # 打怪冷却（秒）
+BEAST_MONEY_MIN_FACTOR = 100     # 金币收益下限 = 等级 × 本值
+BEAST_MONEY_MAX_FACTOR = 5000    # 金币收益上限 = 等级 × 本值
+BEAST_GAIN_LEVELS = 4            # 击杀成功时提升的等级（4 级 = 1 个大境界）
+BEAST_LOSE_LEVELS = 4            # 落败时跌落的等级
+BEAST_GOLD_PROB = 0.55           # 获得大量金币
+BEAST_GAIN_PROB = 0.25           # 修为提升
+BEAST_LOSE_PROB = 0.15           # 境界跌落
+BEAST_DEATH_PROB = 0.05          # 陨落
+
+# ============================================================ 重生
+#: 重生（主动 / 陨落）后保留的修为比例
+REBIRTH_KEEP_RATIO = 0.7
+
 # ============================================================ 贷款
 LOAN_REPAY_MULTIPLIER = 2.0   # 还款倍数：借 100 还 200
 LOAN_GRACE_MINUTES = 15       # 逾期时限（分钟），超时后限制活动
