@@ -191,7 +191,7 @@ class BalanceEconomySection(_BalanceBase):
         default=B.CYCLE_ALLOWANCE, description="每周期首次互动时自动发放的低保。默认 200。", ge=0, le=100000000,
         json_schema_extra={"label": "周期低保", "placeholder": "默认 200", "order": 21, "step": 50})
     work_earn_min: int = Field(
-        default=B.WORK_EARN_MIN, ge=0, le=100000000,
+        default=B.WORK_EARN_MIN, ge=-1000000, le=1000000,
         description="打工收益下限，**可以为负**（负数=亏本倒贴）。实际收益在上限之间随机。默认 -100。",
         json_schema_extra={"label": "打工收益下限（可为负）", "placeholder": "默认 -100", "order": 22, "step": 10})
     work_earn_max_per_level: int = Field(
@@ -353,7 +353,7 @@ class BalanceRobMoneySection(_BalanceBase):
         default=B.ROB_MONEY_GATE, description="/打劫 需要的金币余额。默认 300。", ge=0, le=100000000,
         json_schema_extra={"label": "金币门槛", "placeholder": "默认 300", "order": 70, "step": 50})
     rob_money_cap_ratio: float = Field(
-        default=B.ROB_MONEY_CAP_RATIO, ge=0, le=1,
+        default=B.ROB_MONEY_CAP_RATIO, ge=0, le=10,
         description="单次最多抢走受害者金币的倍数。默认 1.5（最多打成 -50% 负债）；1.0 = 最多抢光。",
         json_schema_extra={"label": "劫掠上限倍数", "placeholder": "默认 1.5", "order": 71, "step": 0.1})
     rob_money_negative_cap: int = Field(
