@@ -31,7 +31,7 @@ class PluginConfigBase(object):
     pass
 
 
-def Field(default=None, description=None, default_factory=None, json_schema_extra=None):
+def Field(default=None, description=None, default_factory=None, json_schema_extra=None, **kwargs):
     if default_factory is not None:
         return default_factory()
     return default
@@ -59,6 +59,12 @@ def Tool(*args, **kwargs):
 
 STUB_PYDANTIC = '''
 def field_validator(*args, **kwargs):
+    def deco(fn):
+        return fn
+    return deco
+
+
+def model_validator(*args, **kwargs):
     def deco(fn):
         return fn
     return deco

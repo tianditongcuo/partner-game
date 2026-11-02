@@ -5,7 +5,7 @@
     "version": "2.0.2",
     "files": {
       "plugin.py": 2865,
-      "config.py": 674,
+      "config.py": 698,
       "utils.py": 117,
       "__init__.py": 2
     },
