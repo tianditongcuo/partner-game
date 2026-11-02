@@ -272,8 +272,8 @@ class BalanceMarriageSection(_BalanceBase):
     divorce_penalty_enabled: bool = Field(
         default=B.DIVORCE_PENALTY_ENABLED,
         description=(
-            "**离婚惩罚开关**。开启后，主动解除关系（/离婚、/甩掉）时，"
-            "发起方要把约定比例的财富与修为分给对方。默认关闭。"
+            "**离婚惩罚开关**。开启后，主动 /离婚 的一方要把约定比例的财富与修为分给对方。\n"
+            "注意：被别人 /甩掉 不算主动离婚，双方都不受惩罚。默认关闭。"
         ),
         json_schema_extra={"label": "启用离婚惩罚", "placeholder": "默认关闭", "order": 46})
     divorce_penalty_money_ratio: float = Field(
@@ -456,6 +456,11 @@ class BalanceExploreSection(_BalanceBase):
     realm_dive_fall_prob: float = Field(
         default=B.REALM_DIVE_FALL_PROB, description="修为倒退一个大境界（-4 级）的概率。默认 0.10。", ge=0, le=1,
         json_schema_extra={"label": "倒退概率", "placeholder": "默认 0.10", "order": 94, "step": 0.05})
+    realm_dive_death_prob: float = Field(
+        default=B.REALM_DIVE_DEATH_PROB, ge=0, le=1,
+        description=("下秘境陨落的概率。命中后触发重生：只保留约定比例的修为，其余全部重置。\n"
+                     "默认 0.05（5%）。填 0 = 秘境永不陨落。"),
+        json_schema_extra={"label": "秘境·陨落概率", "placeholder": "默认 0.05", "order": 97, "step": 0.01})
 
 
 class BalanceLoanSection(_BalanceBase):
@@ -520,13 +525,11 @@ class BalanceHeavenSection(_BalanceBase):
             "其余一切（金币、伴侣、贷款、氪金加成、本周期次数与冷却）全部重置。"
         ),
         json_schema_extra={"label": "重生保留修为比例", "placeholder": "默认 0.7", "order": 109, "step": 0.05})
-    realm_dive_death_prob: float = Field(
-        default=B.REALM_DIVE_DEATH_PROB, description="下秘境陨落的概率：修为归零、金币保留。默认 0.05。", ge=0, le=1,
-        json_schema_extra={"label": "秘境·陨落概率", "placeholder": "默认 0.05", "order": 114, "step": 0.01})
     fine_compensation_ratio: float = Field(
         default=B.FINE_COMPENSATION_RATIO, ge=0, le=1,
-        description="所有罚款中赔付给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。",
-        json_schema_extra={"label": "罚款赔付比例", "placeholder": "默认 0.5", "order": 115, "step": 0.05})
+        description=("**失败罚款**里赔给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。\n"
+                     "只影响「强娶/抢老婆/打劫 失败」的罚款，与天罚是两回事。"),
+        json_schema_extra={"label": "失败罚款·赔给对手比例", "placeholder": "默认 0.5", "order": 115, "step": 0.05})
 
 
 class BalanceBeastSection(_BalanceBase):
@@ -538,6 +541,11 @@ class BalanceBeastSection(_BalanceBase):
     __ui_label__: ClassVar[str] = "⑫ 打怪"
     __ui_order__: ClassVar[int] = 13
 
+    beast_cycle_hours: int = Field(
+        default=B.BEAST_CYCLE_HOURS, ge=1, le=8760,
+        description=("/打怪 自己的周期时长（小时），到点后本周期打怪次数清零。默认 24。\n"
+                     "与「下秘境」「打劫」的周期互不影响，可以分别设置。"),
+        json_schema_extra={"label": "打怪周期（小时）", "placeholder": "默认 24", "order": 119, "step": 1})
     beast_limit: Union[int, str] = Field(
         default=B.BEAST_LIMIT,
         description="每周期可以打几次怪。默认 3；填「不限制」= 不限次；填 0 = 禁止打怪。",

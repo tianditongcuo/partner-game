@@ -186,6 +186,7 @@ python docs/tools/test_rules.py            # 业务规则测试
 python docs/tools/test_handlers.py         # handler 级测试（真跑成功/失败分支）
 python docs/tools/verify_plugin.py . <plugins目录>      # 插件识别预检
 python docs/tools/deploy.py --plugins-dir <plugins目录> # 一键部署
+python docs/tools/sync_config.py --config <插件目录>/config.toml  # 升级后补齐新字段（保留你改过的值）
 ```
 
 > `check_config.py` 需要用 MaiBot 自带的 Python 运行（依赖 pydantic + maibot_sdk），

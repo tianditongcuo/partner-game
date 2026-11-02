@@ -1365,12 +1365,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             if cfg.persist_enabled:
                 await self._store.save()
             target_nick = await self._get_member_nick(group_id, target_qq)
-            penalty = self._apply_divorce_penalty(group_id, sender_qq, target_qq)
-            if penalty:
-                await self._store.save()
+            # 甩掉 ≠ 主动离婚：双方都不受离婚惩罚
             await self._send_avatar_msg(
                 group_id,
-                f"你已成功甩掉了【{target_nick}({target_qq})】，现在恢复自由身了~{penalty}",
+                f"你已成功甩掉了【{target_nick}({target_qq})】，现在恢复自由身了~",
                 sender_qq, target_qq)
             
         return True, "Dumped", 2
@@ -2703,7 +2701,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "cooldown", 2
 
         user = self._get_user_data(group_id, sender_qq)
-        if not self._check_daily_limit(group_id, sender_qq, "beast", B.BEAST_LIMIT):
+        if not self._check_daily_limit(group_id, sender_qq, "beast", B.BEAST_LIMIT,
+                                       cycle_hours=B.BEAST_CYCLE_HOURS):
             await self._send_avatar_msg(group_id, "你本周期已经打够了，怪物们也需要休息。", sender_qq, "")
             return True, "limit", 2
 

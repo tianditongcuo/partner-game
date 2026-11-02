@@ -126,6 +126,7 @@ TIAN_FA_CRIME_THRESHOLD = 8
 TIAN_FA_MONEY_RATIO = 0.6
 
 # ============================================================ 打怪
+BEAST_CYCLE_HOURS = 24           # 打怪自己的周期时长（与秘境/打劫互不影响）
 BEAST_LIMIT = 3                  # 每周期可打几次怪
 COOLDOWN_BEAST = 60              # 打怪冷却（秒）
 BEAST_MONEY_MIN_FACTOR = 100     # 金币收益下限 = 等级 × 本值

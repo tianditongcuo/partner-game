@@ -524,6 +524,25 @@ async def run(mod, pkg):
     results.append(("成员缓存", "API 调用 %d 次" % calls["n"], "两次查询应只调 1 次"))
     p.ctx.api = None
 
+    # ---- 甩掉：双方都不受离婚惩罚 ----
+    reset()
+    B.DIVORCE_PENALTY_ENABLED = True
+    store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                         "wife_card": "", "affection": 0}}
+    users["u1"] = {"money": 1000, "level": 20, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 20, "last_allowance": today}
+    ctx("u2")                                    # 老婆主动甩掉老公
+    p._extract_at_qq = lambda kwargs: "u1"
+    with patch.object(random, "randint", return_value=500):
+        r = await p.handle_dump(stream_id="", message={"processed_plain_text": "/甩掉 @u1"})
+    untouched = (users["u1"]["money"] == 1000 and users["u1"]["level"] == 20
+                 and users["u2"]["money"] == 1000 and users["u2"]["level"] == 20)
+    ok &= bool(untouched)
+    results.append(("甩掉不惩罚", "u1 %s/%s  u2 %s/%s" % (users["u1"]["money"], users["u1"]["level"],
+                                                     users["u2"]["money"], users["u2"]["level"]),
+                    "双方都应保持 1000/20"))
+    B.DIVORCE_PENALTY_ENABLED = False
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:
