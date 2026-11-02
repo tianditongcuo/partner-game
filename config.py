@@ -421,6 +421,14 @@ class BalanceExploreSection(PluginConfigBase):
     realm_dive_surge_prob: float = Field(
         default=B.REALM_DIVE_SURGE_PROB, description="修为暴涨一个大境界（+4 级）的概率。默认 0.15。",
         json_schema_extra={"label": "暴涨概率", "placeholder": "默认 0.15", "order": 93, "step": 0.05})
+    realm_dive_surge_levels: int = Field(
+        default=B.REALM_DIVE_SURGE_LEVELS,
+        description="「修为暴涨」时提升几级（4 级 = 1 个大境界）。默认 4。",
+        json_schema_extra={"label": "暴涨提升等级数", "placeholder": "默认 4", "order": 95, "step": 1})
+    realm_dive_fall_levels: int = Field(
+        default=B.REALM_DIVE_FALL_LEVELS,
+        description="「修为倒退」时跌落几级（4 级 = 1 个大境界）。默认 4。",
+        json_schema_extra={"label": "倒退跌落等级数", "placeholder": "默认 4", "order": 96, "step": 1})
     realm_dive_fall_prob: float = Field(
         default=B.REALM_DIVE_FALL_PROB, description="修为倒退一个大境界（-4 级）的概率。默认 0.10。",
         json_schema_extra={"label": "倒退概率", "placeholder": "默认 0.10", "order": 94, "step": 0.05})
@@ -534,6 +542,116 @@ class BalanceBeastSection(PluginConfigBase):
         json_schema_extra={"label": "陨落概率", "placeholder": "默认 0.05", "order": 129, "step": 0.01})
 
 
+class BalanceBullySection(PluginConfigBase):
+    """⑬ 霸凌 —— 高境界者对低境界者的压制，抢点钱并封锁对方行动。
+
+    发起条件：自己的境界必须比对方高 BULLY_LEVEL_GAP 级（默认 8 级 = 2 个大境界）。
+    """
+
+    __ui_label__: ClassVar[str] = "⑬ 霸凌"
+    __ui_order__: ClassVar[int] = 14
+
+    bully_cycle_hours: int = Field(
+        default=B.BULLY_CYCLE_HOURS,
+        description="/霸凌 自己的周期时长（小时），到点后本周期次数清零。默认 24。",
+        json_schema_extra={"label": "霸凌周期（小时）", "placeholder": "默认 24", "order": 130, "step": 1})
+    cooldown_bully: int = Field(
+        default=B.COOLDOWN_BULLY,
+        description="两次 /霸凌 之间的冷却秒数。默认 60。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 60", "order": 131, "step": 10})
+    bully_limit: Union[int, str] = Field(
+        default=B.BULLY_LIMIT,
+        description="每周期可霸凌几次。默认 3；填「不限制」= 不限次；0 = 禁用。",
+        json_schema_extra={"label": "周期内霸凌次数", "placeholder": "默认 3", "order": 132, "step": 1})
+    bully_level_gap: int = Field(
+        default=B.BULLY_LEVEL_GAP,
+        description="发起霸凌所需的最小境界差（级）。默认 8（= 2 个大境界）。",
+        json_schema_extra={"label": "所需境界差（级）", "placeholder": "默认 8", "order": 133, "step": 4})
+    bully_ban_seconds: int = Field(
+        default=B.BULLY_BAN_SECONDS,
+        description="霸凌成功后，受害者被封锁行动的时长（秒）。默认 600（10 分钟）。",
+        json_schema_extra={"label": "被封禁时长（秒）", "placeholder": "默认 600", "order": 134, "step": 60})
+    bully_success_prob: float = Field(
+        default=B.BULLY_SUCCESS_PROB,
+        description="霸凌成功率，0~1。默认 0.6。",
+        json_schema_extra={"label": "霸凌成功率", "placeholder": "默认 0.6", "order": 135, "step": 0.05})
+    bully_steal_min: int = Field(
+        default=B.BULLY_STEAL_MIN,
+        description="霸凌成功时抢走金币的下限。默认 50。",
+        json_schema_extra={"label": "抢夺金币下限", "placeholder": "默认 50", "order": 136, "step": 10})
+    bully_steal_max: int = Field(
+        default=B.BULLY_STEAL_MAX,
+        description="霸凌成功时抢走金币的上限。默认 300。",
+        json_schema_extra={"label": "抢夺金币上限", "placeholder": "默认 300", "order": 137, "step": 10})
+    bully_pay_ratio_min: float = Field(
+        default=B.BULLY_PAY_RATIO_MIN,
+        description="霸凌失败时，赔给对方「自己现有金币」的比例下限。默认 0.05。",
+        json_schema_extra={"label": "失败赔付比例下限", "placeholder": "默认 0.05", "order": 138, "step": 0.01})
+    bully_pay_ratio_max: float = Field(
+        default=B.BULLY_PAY_RATIO_MAX,
+        description="霸凌失败时，赔给对方「自己现有金币」的比例上限。默认 0.15。",
+        json_schema_extra={"label": "失败赔付比例上限", "placeholder": "默认 0.15", "order": 139, "step": 0.01})
+
+
+class BalanceSuppressSection(PluginConfigBase):
+    """⑭ 镇压 —— 压倒性境界差才能发动，连对方伴侣一起封禁并打落修为。
+
+    发起条件：自己的境界必须比对方高 SUPPRESS_LEVEL_GAP 级（默认 16 级 = 4 个大境界）。
+    周期按自然日结算（24 小时且与零点对齐）。
+    """
+
+    __ui_label__: ClassVar[str] = "⑭ 镇压"
+    __ui_order__: ClassVar[int] = 15
+
+    suppress_cycle_hours: int = Field(
+        default=B.SUPPRESS_CYCLE_HOURS,
+        description=(
+            "/镇压 的周期时长（小时）。默认 24，且与自然日零点对齐（每日零点重置次数）。\n"
+            "填其它值则按该小时数滚动重置。"
+        ),
+        json_schema_extra={"label": "镇压周期（小时，24=每日零点）", "placeholder": "默认 24", "order": 140, "step": 1})
+    cooldown_suppress: int = Field(
+        default=B.COOLDOWN_SUPPRESS,
+        description="两次 /镇压 之间的冷却秒数。默认 600（10 分钟）。",
+        json_schema_extra={"label": "冷却（秒）", "placeholder": "默认 600", "order": 141, "step": 60})
+    suppress_limit: Union[int, str] = Field(
+        default=B.SUPPRESS_LIMIT,
+        description="每周期可镇压几次。默认 1；填「不限制」= 不限次；0 = 禁用。",
+        json_schema_extra={"label": "周期内镇压次数", "placeholder": "默认 1", "order": 142, "step": 1})
+    suppress_level_gap: int = Field(
+        default=B.SUPPRESS_LEVEL_GAP,
+        description="发起镇压所需的最小境界差（级）。默认 16（= 4 个大境界）。",
+        json_schema_extra={"label": "所需境界差（级）", "placeholder": "默认 16", "order": 143, "step": 4})
+    suppress_ban_seconds: int = Field(
+        default=B.SUPPRESS_BAN_SECONDS,
+        description="镇压成功后，被镇压者被封禁的时长（秒）。默认 1800（30 分钟）。",
+        json_schema_extra={"label": "被镇压者封禁时长（秒）", "placeholder": "默认 1800", "order": 144, "step": 300})
+    suppress_partner_ban_seconds: int = Field(
+        default=B.SUPPRESS_PARTNER_BAN_SECONDS,
+        description="镇压成功后，被镇压者「伴侣」被封禁的时长（秒）。默认 1800。",
+        json_schema_extra={"label": "伴侣封禁时长（秒）", "placeholder": "默认 1800", "order": 145, "step": 300})
+    suppress_success_prob: float = Field(
+        default=B.SUPPRESS_SUCCESS_PROB,
+        description="镇压成功率，0~1。默认 0.5。",
+        json_schema_extra={"label": "镇压成功率", "placeholder": "默认 0.5", "order": 146, "step": 0.05})
+    suppress_drop_levels: int = Field(
+        default=B.SUPPRESS_DROP_LEVELS,
+        description="镇压成功时，让对方夫妻各自跌落的等级数。默认 4（= 1 个大境界）。",
+        json_schema_extra={"label": "成功时对方跌落等级", "placeholder": "默认 4", "order": 147, "step": 1})
+    suppress_fail_self_drop: int = Field(
+        default=B.SUPPRESS_FAIL_SELF_DROP,
+        description="镇压失败时，自己跌落的等级数。默认 1。",
+        json_schema_extra={"label": "失败时自己跌落等级", "placeholder": "默认 1", "order": 148, "step": 1})
+    suppress_pay_ratio_min: float = Field(
+        default=B.SUPPRESS_PAY_RATIO_MIN,
+        description="镇压失败时，赔给对方「自己现有金币」的比例下限。默认 0.10。",
+        json_schema_extra={"label": "失败赔付比例下限", "placeholder": "默认 0.10", "order": 149, "step": 0.01})
+    suppress_pay_ratio_max: float = Field(
+        default=B.SUPPRESS_PAY_RATIO_MAX,
+        description="镇压失败时，赔给对方「自己现有金币」的比例上限。默认 0.30。",
+        json_schema_extra={"label": "失败赔付比例上限", "placeholder": "默认 0.30", "order": 150, "step": 0.01})
+
+
 class PartnerGameConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     partner_game: PartnerGameSection = Field(default_factory=PartnerGameSection)
@@ -550,5 +668,7 @@ class PartnerGameConfig(PluginConfigBase):
     balance_loan: BalanceLoanSection = Field(default_factory=BalanceLoanSection)
     balance_heaven: BalanceHeavenSection = Field(default_factory=BalanceHeavenSection)
     balance_beast: BalanceBeastSection = Field(default_factory=BalanceBeastSection)
+    balance_bully: BalanceBullySection = Field(default_factory=BalanceBullySection)
+    balance_suppress: BalanceSuppressSection = Field(default_factory=BalanceSuppressSection)
 
 

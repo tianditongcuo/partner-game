@@ -58,6 +58,8 @@ COMMAND_DOMAIN = {
     "repay": "economy",
     "give_money": "economy",
     "realm_dive": "cultivation",
+    "bully": "combat",
+    "suppress": "combat",
     "mating_request": "marriage",
     "mating_reply": "marriage",
     "recharge": "economy",

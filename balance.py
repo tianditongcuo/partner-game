@@ -133,6 +133,31 @@ BEAST_GAIN_PROB = 0.25           # 修为提升
 BEAST_LOSE_PROB = 0.15           # 境界跌落
 BEAST_DEATH_PROB = 0.05          # 陨落
 
+# ============================================================ 霸凌
+BULLY_LIMIT = 3                  # 每周期可霸凌次数
+BULLY_CYCLE_HOURS = 24           # 霸凌自己的周期时长
+COOLDOWN_BULLY = 60              # 霸凌冷却（秒）
+BULLY_LEVEL_GAP = 8              # 发起所需境界差（8 级 = 2 个大境界）
+BULLY_SUCCESS_PROB = 0.6         # 霸凌成功率
+BULLY_BAN_SECONDS = 600          # 受害者被封锁行动的时长（秒）
+BULLY_STEAL_MIN = 50             # 抢走金币下限
+BULLY_STEAL_MAX = 300            # 抢走金币上限
+BULLY_PAY_RATIO_MIN = 0.05       # 失败赔付比例下限
+BULLY_PAY_RATIO_MAX = 0.15       # 失败赔付比例上限
+
+# ============================================================ 镇压
+SUPPRESS_LIMIT = 1               # 每周期可镇压次数
+SUPPRESS_CYCLE_HOURS = 24        # 镇压周期（24 = 每日零点重置）
+COOLDOWN_SUPPRESS = 600          # 镇压冷却（秒）
+SUPPRESS_LEVEL_GAP = 16          # 发起所需境界差（16 级 = 4 个大境界）
+SUPPRESS_SUCCESS_PROB = 0.5      # 镇压成功率
+SUPPRESS_BAN_SECONDS = 1800      # 被镇压者封禁时长（秒）
+SUPPRESS_PARTNER_BAN_SECONDS = 1800  # 被镇压者伴侣的封禁时长（秒）
+SUPPRESS_DROP_LEVELS = 4         # 成功时让对方夫妻跌落的等级
+SUPPRESS_FAIL_SELF_DROP = 1      # 失败时自己跌落的等级
+SUPPRESS_PAY_RATIO_MIN = 0.10    # 失败赔付比例下限
+SUPPRESS_PAY_RATIO_MAX = 0.30    # 失败赔付比例上限
+
 # ============================================================ 重生
 #: 重生（主动 / 陨落）后保留的修为比例
 REBIRTH_KEEP_RATIO = 0.7
@@ -148,6 +173,8 @@ REALM_DIVE_MONEY_MAX_FACTOR = 10000  # 金币收益上限 = 等级 × 本值
 REALM_DIVE_GOLD_PROB = 0.70      # 获得金币
 REALM_DIVE_SURGE_PROB = 0.15     # 修为暴涨一个大境界
 REALM_DIVE_FALL_PROB = 0.10      # 修为倒退一个境界
+REALM_DIVE_SURGE_LEVELS = 4      # 暴涨时提升的等级（4 级 = 1 个大境界）
+REALM_DIVE_FALL_LEVELS = 4       # 倒退时跌落的等级
 REALM_DIVE_DEATH_PROB = 0.05     # 陨落（修为归零、金币保留）
 
 # ============================================================ 罚款与惩罚

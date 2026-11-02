@@ -418,6 +418,65 @@ async def run(mod, pkg):
     results.append(("独立周期", "打劫 1h：%s/%s→%s，秘境 168h：%s" % (first, second, third, dive_ok),
                     "应 True/False/True，且秘境不受影响"))
 
+    # ---- 氪金失败免罚 ----
+    reset()
+    ctx("u3")
+    p._extract_at_qq = lambda kwargs: "u1"
+    users["u3"] = {"money": 1000, "level": 10, "last_allowance": today, "recharge": 0.5}
+    users["u1"] = {"money": 1000, "level": 10, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.99), \
+         patch.object(random, "randint", return_value=200):
+        await p.handle_rob_money(stream_id="", message={"processed_plain_text": "/打劫 @u1"})
+    no_fine = (users["u3"]["money"] == 1000)
+    results.append(("氪金免罚", "失败后余额=%s" % users["u3"]["money"], "应仍为 1000（不罚款）"))
+    ok &= bool(no_fine)
+
+    # ---- 霸凌：境界差不足应被拒绝 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    users["u1"] = {"money": 1000, "level": 30, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 26, "last_allowance": today}   # 差 4 级 < 8
+    r = await p.handle_bully(stream_id="", message={"processed_plain_text": "/霸凌 @u2"})
+    ok &= (r[1] == "Gap too small")
+    results.append(("霸凌·境界不足", r[1], "差 4 级应被拒"))
+
+    # ---- 霸凌：成功的抢钱与封禁 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    users["u1"] = {"money": 1000, "level": 40, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 20, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.1), \
+         patch.object(random, "randint", return_value=100):
+        r = await p.handle_bully(stream_id="", message={"processed_plain_text": "/霸凌 @u2"})
+    ban_ok = users["u2"].get("banned_until", 0) > __import__("time").time()
+    ok &= (users["u2"]["money"] == 900 and users["u1"]["money"] == 1100 and ban_ok)
+    results.append(("霸凌·成功", "u2 金币=%s 封禁=%s" % (users["u2"]["money"], ban_ok), "应 -100 且被封禁"))
+
+    # ---- 被封禁者无法打工 ----
+    ctx("u2")
+    r = await p.handle_work(stream_id="", message={"processed_plain_text": "/打工"})
+    ok &= (r[1] == "blocked")
+    results.append(("封禁拦截", r[1], "被封禁者应被拦下"))
+
+    # ---- 镇压：双方封禁 + 修为跌落 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    store.data["marriages"][G] = {"u2": {"date": today, "wife_uid": "u5", "wife_nick": "u5",
+                                         "wife_card": "", "affection": 0}}
+    users["u1"] = {"money": 5000, "level": 60, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 40, "last_allowance": today}
+    users["u5"] = {"money": 1000, "level": 30, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.1):
+        r = await p.handle_suppress(stream_id="", message={"processed_plain_text": "/镇压 @u2"})
+    both_banned = (users["u2"].get("banned_until", 0) > 0 and users["u5"].get("banned_until", 0) > 0)
+    dropped = (users["u2"]["level"] == 36 and users["u5"]["level"] == 26)
+    ok &= bool(both_banned and dropped)
+    results.append(("镇压·成功", "u2=%s级 u5=%s级 双双封禁=%s" % (users["u2"]["level"], users["u5"]["level"], both_banned),
+                    "各 -4 级且伴侣也封禁"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

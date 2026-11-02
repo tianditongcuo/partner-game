@@ -32,6 +32,7 @@ _BALANCE_SECTIONS = (
     "balance_cycle", "balance_economy", "balance_cultivation", "balance_marriage",
     "balance_force", "balance_rob_wife", "balance_rob_money", "balance_social",
     "balance_explore", "balance_loan", "balance_heaven", "balance_beast",
+    "balance_bully", "balance_suppress",
 )
 
 _BALANCE_DEFAULTS = {
@@ -530,6 +531,35 @@ class PartnerGamePlugin(MaiBotPlugin):
         amount = min(amount, cap)
         return max(B.ROB_MONEY_STEAL_MIN, amount)
 
+    # ---------------- 封禁（霸凌 / 镇压）----------------
+    def _guard(self, group_id: str, qq: str, action: str = ""):
+        """统一的行动前置检查：返回 (是否拦下, 提示文案)。
+
+        依次检查：
+          1. 是否被霸凌/镇压封禁（/还贷 与 /重生 始终放行，避免死锁）
+          2. 是否有逾期贷款（只放行 打工 / 下秘境 / 还贷）
+        """
+        user = self._get_user_data(group_id, qq)
+
+        ban_until = float(user.get("banned_until", 0) or 0)
+        if ban_until > time.time() and action not in ("repay", "rebirth"):
+            left = int(ban_until - time.time())
+            reason = user.get("ban_reason") or "被人压制"
+            return True, ("你正被【%s】封禁，%d 秒内无法行动（剩 %d 秒）。"
+                          % (reason, int(ban_until - time.time()) + 0, left))
+
+        if self._loan_overdue(user) and action not in ("work", "realm_dive", "repay", "rebirth"):
+            return True, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。"
+        return False, ""
+
+    def _ban(self, group_id: str, qq: str, seconds: int, reason: str) -> int:
+        """封禁某人的主动行动，返回封禁结束时间戳。"""
+        user = self._get_user_data(group_id, qq)
+        until = time.time() + max(0, int(seconds))
+        user["banned_until"] = until
+        user["ban_reason"] = reason
+        return until
+
     # ---------------- 贷款 ----------------
     def _loan_of(self, user: dict):
         """取出未还清的贷款记录；没有则返回 None。"""
@@ -748,9 +778,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "draw")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("好像是私聊呢，去群聊里找你的老婆吧。", stream_id)
@@ -889,9 +920,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "divorce")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("只能在群里离婚喔～", stream_id)
@@ -1017,9 +1049,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "marry")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1098,9 +1131,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "force_marry")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1154,7 +1188,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             prob = 0.0
             
         prob = max(B.FORCE_FLOOR, min(B.FORCE_CAP, prob))
-        prob = min(B.RECHARGE_CAP, prob + self._take_recharge(sender_data))   # 氪金加成
+        recharge = self._take_recharge(sender_data)      # 氪金加成（用于失败免罚判断）
+        prob = min(B.RECHARGE_CAP, prob + recharge)
 
         if random.random() < prob:
             target_nick = await self._get_member_nick(group_id, target_qq)
@@ -1174,7 +1209,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"霸道强娶成功！恭喜【{sender_nick}({sender_qq})】凭实力得到了【{target_nick}({target_qq})】！", sender_qq, target_qq)
         else:
-            fine = self._calc_fine(sender_data["money"], B.FORCE_FINE_FLOOR, B.FORCE_FINE_CAP_RATIO)
+            fine = 0 if recharge > 0 else self._calc_fine(sender_data["money"], B.FORCE_FINE_FLOOR, B.FORCE_FINE_CAP_RATIO)
             target_data = self._get_user_data(group_id, target_qq)
             comp = self._settle_fine(sender_data, target_data, fine)
             
@@ -1247,9 +1282,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "dump")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1313,9 +1349,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
             
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "rob_wife")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1416,12 +1453,12 @@ class PartnerGamePlugin(MaiBotPlugin):
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
             await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
-            fine = self._calc_fine(sender_data["money"], B.ROB_WIFE_FINE_FLOOR, B.ROB_WIFE_FINE_CAP_RATIO)
+            fine = 0 if recharge > 0 else self._calc_fine(sender_data["money"], B.ROB_WIFE_FINE_FLOOR, B.ROB_WIFE_FINE_CAP_RATIO)
             comp = self._settle_fine(sender_data, husband_data, fine)
             
             injury_msg = ""
             # Random chance to get injured if picking a fight and failing
-            if not is_forced and random.random() < B.ROB_WIFE_DROP_CHANCE and sender_data["level"] > 0:
+            if recharge <= 0 and not is_forced and random.random() < B.ROB_WIFE_DROP_CHANCE and sender_data["level"] > 0:
                 sender_data["level"] -= 1
                 injury_msg = "\n并且你被反杀成重伤，境界跌落了1层！"
                 
@@ -1519,9 +1556,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Plugin Disabled", 0
 
         group_id, sender_qq, sender_nick = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "rob_money")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             await self.ctx.send.text("请在群聊中使用该命令喔～", stream_id)
@@ -1587,7 +1625,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
-            fine = self._calc_fine(sender_data["money"], B.ROB_MONEY_FINE_FLOOR, B.ROB_MONEY_FINE_CAP_RATIO)
+            fine = 0 if recharge > 0 else self._calc_fine(sender_data["money"], B.ROB_MONEY_FINE_FLOOR, B.ROB_MONEY_FINE_CAP_RATIO)
             comp = self._settle_fine(sender_data, target_data, fine)
             
             if cfg.persist_enabled:
@@ -1686,7 +1724,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"18. /申请交配：好感满 {B.MATING_AFFECTION_MIN} 后向伴侣申请，对方回复「同意」/「拒绝」。\n"
             f"   每次成功可加 {B.MATING_AFFECTION_GAIN} 好感，每周期上限 {B.MATING_LIMIT} 次。\n"
             "19. /打怪：挑战怪物，可能暴富、涨修为、掉境界甚至陨落（概率可配）。\n"
-            "20. /重生：重入轮回，只保留部分修为，其余全部重置（陨落时自动触发）。\n"
+            "20. /重生：重入轮回，只保留部分修为，其余全部重置（陨落时自动触发）。\n"            "21. /霸凌 @某人：境界高 2 个大境界才能用，抢钱并封禁对方行动。\n"
+            "22. /镇压 @某人：境界高 4 个大境界才能用，封禁对方与其伴侣并打落修为。\n"
             "【群排行榜】\n"
             "14. /战力榜：查看本群修仙大能。\n"
             "15. /财富榜：查看本群首富。\n"
@@ -1717,6 +1756,11 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        blocked, why = self._guard(group_id, sender_qq, "work")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
@@ -1752,9 +1796,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "date")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             return True, "Not in group", 2
@@ -1809,9 +1854,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "cultivate")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             return True, "Not in group", 2
@@ -1902,6 +1948,11 @@ class PartnerGamePlugin(MaiBotPlugin):
             state = "已逾期（行动被封禁）" if left <= 0 else "剩余 %d 分钟" % int(left // 60)
             msg += f"\n天道债务：本金 {loan['principal']}，需还 {owed}（{state}）\n"
 
+        ban_until = float(user_data.get("banned_until", 0) or 0)
+        if ban_until > time.time():
+            msg += "\n状态：被【%s】封禁中，剩余 %d 秒\n" % (
+                user_data.get("ban_reason") or "压制", int(ban_until - time.time()))
+
         usage = self._store.data.get("daily_usage", {}).get(group_id, {}).get(sender_qq, {})
         msg += f"\n本周期已打工：{usage.get('work', 0)}/{B.WORK_LIMIT}\n"
         msg += f"本周期已修炼：{usage.get('cultivate', 0)}/{B.CULTIVATE_LIMIT}\n"
@@ -1919,9 +1970,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Quote ignored", 0
 
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
-        if group_id and sender_qq and self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你身上还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "transfer")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         if not group_id or not sender_qq:
             return True, "Not in group", 2
@@ -2321,9 +2373,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
-        if self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，不能往外送钱。先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "give_money")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
 
         is_cd, remaining = self._check_cooldown(group_id, sender_qq, "give_money", B.COOLDOWN_GIVE)
         if is_cd:
@@ -2397,12 +2451,12 @@ class PartnerGamePlugin(MaiBotPlugin):
             msg = f"你在秘境深处寻得一处灵石矿脉，收获 {gain} 金币！当前余额 {user['money']}。"
         elif roll < p_gold + p_surge:
             before = level
-            user["level"] = min(MAX_LEVEL, level + 4)
+            user["level"] = min(MAX_LEVEL, level + B.REALM_DIVE_SURGE_LEVELS)
             msg = (f"秘境中偶得大能遗蜕，你吸收其道韵，修为暴涨一个大境界！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         elif roll < p_gold + p_surge + p_fall:
             before = level
-            user["level"] = max(0, level - 4)
+            user["level"] = max(0, level - B.REALM_DIVE_FALL_LEVELS)
             msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退一个大境界！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
@@ -2431,9 +2485,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
-        if self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "other")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
 
         marriage = self._get_user_marriage(group_id, sender_qq)
         if not marriage:
@@ -2520,7 +2576,7 @@ class PartnerGamePlugin(MaiBotPlugin):
 
 
     # ---------------- 氪金 ----------------
-    @Command("recharge", pattern=r"^\s*(?:/氪金|氪金)\s+\d+$")
+    @Command("recharge", pattern=r"^\s*(?:/氪金|氪金)\s*\d+$")
     async def handle_recharge(self, stream_id: str = "", **kwargs):
         """花金币给「下一次」行动买成功率：打劫 / 强娶 / 下秘境 / 修炼。"""
         if not self.config.plugin.enabled:
@@ -2577,9 +2633,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
-        if self._loan_block(group_id, sender_qq):
-            await self._send_avatar_msg(group_id, "你还背着逾期的贷款，天道封禁了你的行动！先去【/还贷】吧。", sender_qq, "")
-            return True, "loan_overdue", 2
+        blocked, why = self._guard(group_id, sender_qq, "beast")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
 
         is_cd, rem = self._check_cooldown(group_id, sender_qq, "beast", B.COOLDOWN_BEAST)
         if is_cd:
@@ -2651,6 +2709,156 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"伴侣、贷款、氪金加成与本周期次数全部清空。",
             sender_qq, "")
         return True, "Rebirth done", 2
+
+
+
+    # ---------------- 霸凌 ----------------
+    @Command("bully", pattern=r"^\s*(?:/霸凌|霸凌)(?:\s+|\[CQ:at|@|\d|$).*")
+    async def handle_bully(self, stream_id: str = "", **kwargs):
+        """境界高 2 个大境界才能霸凌：抢钱 + 短期封禁对方行动。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "bully")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
+        target_qq = self._extract_at_qq(kwargs)
+        if not target_qq:
+            await self._send_avatar_msg(group_id, "你想霸凌谁？请 @ 对方。", sender_qq, "")
+            return True, "No target", 2
+        if target_qq == sender_qq:
+            await self._send_avatar_msg(group_id, "自虐不叫霸凌。", sender_qq, "")
+            return True, "Self", 2
+
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "bully", B.COOLDOWN_BULLY)
+        if is_cd:
+            await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            return True, "cooldown", 2
+
+        attacker = self._get_user_data(group_id, sender_qq)
+        victim = self._get_user_data(group_id, target_qq)
+        gap = attacker["level"] - victim["level"]
+        if gap < B.BULLY_LEVEL_GAP:
+            await self._send_avatar_msg(
+                group_id,
+                f"境界压制不足（你的 {realm_name(attacker['level'])} vs 对方 {realm_name(victim['level'])}，"
+                f"相差 {gap} 级，需要 {B.BULLY_LEVEL_GAP} 级 = 2 个大境界）。",
+                sender_qq, "")
+            return True, "Gap too small", 2
+
+        if not self._check_daily_limit(group_id, sender_qq, "bully", B.BULLY_LIMIT,
+                                       cycle_hours=B.BULLY_CYCLE_HOURS):
+            await self._send_avatar_msg(group_id, "本周期霸凌次数已用完。", sender_qq, "")
+            return True, "limit", 2
+
+        nick = await self._get_member_nick(group_id, target_qq)
+
+        if random.random() < B.BULLY_SUCCESS_PROB:
+            stolen = random.randint(B.BULLY_STEAL_MIN, B.BULLY_STEAL_MAX)
+            victim["money"] -= stolen
+            attacker["money"] += stolen
+            self._ban(group_id, target_qq, B.BULLY_BAN_SECONDS, "霸凌")
+            msg = (f"【{sender_qq}】以境界压制霸凌了【{nick}({target_qq})】，"
+                   f"抢走 {stolen} 金币，并将对方封禁 {B.BULLY_BAN_SECONDS} 秒！")
+        else:
+            ratio = random.uniform(B.BULLY_PAY_RATIO_MIN, B.BULLY_PAY_RATIO_MAX)
+            pay = int(max(0, attacker["money"]) * ratio)
+            attacker["money"] -= pay
+            victim["money"] += pay
+            msg = (f"【{sender_qq}】的霸凌被【{nick}({target_qq})】挡下，"
+                   f"反被索赔 {pay} 金币（{round(ratio * 100, 1)}%）。")
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+        await self._send_avatar_msg(group_id, msg, sender_qq, target_qq)
+        return True, "Bully done", 2
+
+    # ---------------- 镇压 ----------------
+    @Command("suppress", pattern=r"^\s*(?:/镇压|镇压)(?:\s+|\[CQ:at|@|\d|$).*")
+    async def handle_suppress(self, stream_id: str = "", **kwargs):
+        """境界高 4 个大境界才能镇压：封禁对方与其伴侣，并打落双方修为。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "suppress")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
+        target_qq = self._extract_at_qq(kwargs)
+        if not target_qq:
+            await self._send_avatar_msg(group_id, "你想镇压谁？请 @ 对方。", sender_qq, "")
+            return True, "No target", 2
+        if target_qq == sender_qq:
+            await self._send_avatar_msg(group_id, "镇压自己并不能证明什么。", sender_qq, "")
+            return True, "Self", 2
+
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "suppress", B.COOLDOWN_SUPPRESS)
+        if is_cd:
+            await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            return True, "cooldown", 2
+
+        attacker = self._get_user_data(group_id, sender_qq)
+        victim = self._get_user_data(group_id, target_qq)
+        gap = attacker["level"] - victim["level"]
+        if gap < B.SUPPRESS_LEVEL_GAP:
+            await self._send_avatar_msg(
+                group_id,
+                f"境界不足以镇压（你 {realm_name(attacker['level'])} vs 对方 {realm_name(victim['level'])}，"
+                f"相差 {gap} 级，需要 {B.SUPPRESS_LEVEL_GAP} 级 = 4 个大境界）。",
+                sender_qq, "")
+            return True, "Gap too small", 2
+
+        if not self._check_daily_limit(group_id, sender_qq, "suppress", B.SUPPRESS_LIMIT,
+                                       cycle_hours=B.SUPPRESS_CYCLE_HOURS):
+            await self._send_avatar_msg(group_id, "本周期镇压次数已用完。", sender_qq, "")
+            return True, "limit", 2
+
+        nick = await self._get_member_nick(group_id, target_qq)
+        marriage = self._get_user_marriage(group_id, target_qq)
+        partner_qq = str(marriage["partner_uid"]) if marriage else None
+
+        if random.random() < B.SUPPRESS_SUCCESS_PROB:
+            self._ban(group_id, target_qq, B.SUPPRESS_BAN_SECONDS, "镇压")
+            if partner_qq:
+                self._ban(group_id, partner_qq, B.SUPPRESS_PARTNER_BAN_SECONDS, "镇压")
+
+            victim["level"] = max(0, victim["level"] - B.SUPPRESS_DROP_LEVELS)
+            if partner_qq:
+                partner = self._get_user_data(group_id, partner_qq)
+                partner["level"] = max(0, partner["level"] - B.SUPPRESS_DROP_LEVELS)
+
+            msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
+                   f"对方被封禁 {B.SUPPRESS_BAN_SECONDS} 秒"
+                   + (f"，其伴侣也被一并封禁 {B.SUPPRESS_PARTNER_BAN_SECONDS} 秒" if partner_qq else "")
+                   + f"；夫妻二人修为各跌落 {B.SUPPRESS_DROP_LEVELS} 级。")
+        else:
+            ratio = random.uniform(B.SUPPRESS_PAY_RATIO_MIN, B.SUPPRESS_PAY_RATIO_MAX)
+            pay = int(max(0, attacker["money"]) * ratio)
+            attacker["money"] -= pay
+            victim["money"] += pay
+            attacker["level"] = max(0, attacker["level"] - B.SUPPRESS_FAIL_SELF_DROP)
+            msg = (f"【{sender_qq}】的镇压被【{nick}({target_qq})】反制！\n"
+                   f"赔付 {pay} 金币（{round(ratio * 100, 1)}%），自身境界跌落 {B.SUPPRESS_FAIL_SELF_DROP} 级。")
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+        await self._send_avatar_msg(group_id, msg, sender_qq, target_qq)
+        return True, "Suppress done", 2
 
 
 def create_plugin():
