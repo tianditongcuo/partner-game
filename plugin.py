@@ -2894,15 +2894,27 @@ class PartnerGamePlugin(MaiBotPlugin):
             if partner_qq:
                 self._ban(group_id, partner_qq, B.SUPPRESS_PARTNER_BAN_SECONDS, "镇压")
 
-            victim["level"] = max(0, victim["level"] - B.SUPPRESS_DROP_LEVELS)
+            victim_before = victim["level"]
+            victim["level"] = max(0, victim_before - B.SUPPRESS_DROP_LEVELS)
+            partner_before = None
             if partner_qq:
                 partner = self._get_user_data(group_id, partner_qq)
-                partner["level"] = max(0, partner["level"] - B.SUPPRESS_DROP_LEVELS)
+                partner_before = partner["level"]
+                partner["level"] = max(0, partner_before - B.SUPPRESS_DROP_LEVELS)
 
-            msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
-                   f"对方被封禁 {B.SUPPRESS_BAN_SECONDS} 秒"
-                   + (f"，其伴侣也被一并封禁 {B.SUPPRESS_PARTNER_BAN_SECONDS} 秒" if partner_qq else "")
-                   + f"；夫妻二人修为各跌落 {B.SUPPRESS_DROP_LEVELS} 级。")
+            if partner_qq:
+                # 夫妻版：伴侣一并封禁、二人同时掉修为
+                msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
+                       f"对方被封禁 {B.SUPPRESS_BAN_SECONDS} 秒，"
+                       f"其伴侣也被一并封禁 {B.SUPPRESS_PARTNER_BAN_SECONDS} 秒；\n"
+                       f"夫妻二人修为各跌落 {B.SUPPRESS_DROP_LEVELS} 级"
+                       f"（【{realm_name(victim_before)}】→【{realm_name(victim['level'])}】）。")
+            else:
+                # 单身版：没有伴侣可牵连，只罚本人
+                msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
+                       f"对方孤身一人、无人分担，被封禁 {B.SUPPRESS_BAN_SECONDS} 秒，"
+                       f"修为跌落 {B.SUPPRESS_DROP_LEVELS} 级"
+                       f"（【{realm_name(victim_before)}】→【{realm_name(victim['level'])}】）。")
         else:
             ratio = random.uniform(B.SUPPRESS_PAY_RATIO_MIN, B.SUPPRESS_PAY_RATIO_MAX)
             pay = int(max(0, attacker["money"]) * ratio)

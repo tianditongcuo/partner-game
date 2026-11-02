@@ -543,6 +543,33 @@ async def run(mod, pkg):
                     "双方都应保持 1000/20"))
     B.DIVORCE_PENALTY_ENABLED = False
 
+    # ---- 镇压文案：夫妻版 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    store.data["marriages"][G] = {"u2": {"date": today, "wife_uid": "u5", "wife_nick": "u5",
+                                         "wife_card": "", "affection": 0}}
+    users["u1"] = {"money": 5000, "level": 60, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 40, "last_allowance": today}
+    users["u5"] = {"money": 1000, "level": 30, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.1):
+        await p.handle_suppress(stream_id="", message={"processed_plain_text": "/镇压 @u2"})
+    couple_msg = rec.msgs[-1]
+    ok &= ("伴侣" in couple_msg and "夫妻二人" in couple_msg and "孤身" not in couple_msg)
+    results.append(("镇压文案·夫妻", couple_msg.splitlines()[-1][:26], "应出现「伴侣/夫妻二人」"))
+
+    # ---- 镇压文案：单身版 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u3"
+    users["u1"] = {"money": 5000, "level": 60, "last_allowance": today}
+    users["u3"] = {"money": 1000, "level": 40, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.1):
+        await p.handle_suppress(stream_id="", message={"processed_plain_text": "/镇压 @u3"})
+    single_msg = rec.msgs[-1]
+    ok &= ("孤身" in single_msg and "夫妻" not in single_msg and "伴侣" not in single_msg)
+    results.append(("镇压文案·单身", single_msg.splitlines()[-1][:26], "不应出现「夫妻/伴侣」"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:
