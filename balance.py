@@ -68,6 +68,11 @@ DATE_AFF_MAX = 20         # 好感增加上限
 CULTIVATE_COST_BASE = 50  # 每个大境界的系数：费用 = (境界序号+1) × 该值
 MINOR_SUCCESS_RATE = 0.80 # 小境界突破成功率
 MAJOR_SUCCESS_RATE = 0.40 # 大境界突破成功率
+# ---- 雷劫：只有指定境界的「大境界突破」才会遇到 ----
+TRIBULATION_REALM_INDEX = 9      # 第几个大境界开始（9 = 元婴）
+TRIBULATION_PROB = 1.0           # 遭遇雷劫的概率（1.0 = 必遇）
+TRIBULATION_DROP_LEVELS = 1      # 雷劫惩罚：跌落几层（1 层 = 1 级）
+
 MAJOR_FAIL_DROP_RATE = 0.30  # 大境界突破失败后，再判定「走火入魔掉级」的概率
 
 # ============================================================ 好感护盾

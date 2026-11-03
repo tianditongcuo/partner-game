@@ -229,6 +229,27 @@ class BalanceCultivationSection(_BalanceBase):
     major_fail_drop_rate: float = Field(
         default=B.MAJOR_FAIL_DROP_RATE, description="大境界失败后走火入魔（掉 1 级）的概率。默认 0.3。", ge=0, le=1,
         json_schema_extra={"label": "走火入魔概率", "placeholder": "默认 0.3", "order": 33, "step": 0.05})
+    tribulation_realm_index: int = Field(
+        default=B.TRIBULATION_REALM_INDEX, ge=0, le=24,
+        description=(
+            "雷劫从第几个大境界开始出现（0=凡境, 4=筑基, 8=金丹, 9=元婴…）。默认 9 = 元婴。\n"
+            "只有该境界的「大境界突破」才会引来雷劫。"
+        ),
+        json_schema_extra={"label": "雷劫起始境界序号", "placeholder": "默认 9（元婴）", "order": 33, "step": 1})
+    tribulation_prob: float = Field(
+        default=B.TRIBULATION_PROB, ge=0, le=1,
+        description=(
+            "处于该境界时，每次大境界突破遭遇雷劫的概率。1.0 = 必遇，0 = 关闭雷劫。\n"
+            "若本次行动带氪金加成，会按加成值等量降低雷劫概率（氪金续命）。"
+        ),
+        json_schema_extra={"label": "雷劫触发概率", "placeholder": "默认 1.0", "order": 34, "step": 0.05})
+    tribulation_drop_levels: int = Field(
+        default=B.TRIBULATION_DROP_LEVELS, ge=0, le=100,
+        description=(
+            "雷劫降下后修为跌落的层数。默认 1。\n"
+            "遭遇雷劫时本次突破直接失败，并按此数值跌落。"
+        ),
+        json_schema_extra={"label": "雷劫跌落层数", "placeholder": "默认 1", "order": 35, "step": 1})
     recharge_coins_per_percent: int = Field(
         default=B.RECHARGE_COINS_PER_PERCENT, ge=0, le=100000000,
         description=(
@@ -443,18 +464,18 @@ class BalanceExploreSection(_BalanceBase):
         default=B.REALM_DIVE_GOLD_PROB, description="获得金币的概率。默认 0.70。与其他结果合计应≈1。", ge=0, le=1,
         json_schema_extra={"label": "得金币概率", "placeholder": "默认 0.70", "order": 92, "step": 0.05})
     realm_dive_surge_prob: float = Field(
-        default=B.REALM_DIVE_SURGE_PROB, description="修为暴涨一个大境界（+4 级）的概率。默认 0.15。", ge=0, le=1,
+        default=B.REALM_DIVE_SURGE_PROB, description="触发「修为暴涨」的概率。默认 0.15。", ge=0, le=1,
         json_schema_extra={"label": "暴涨概率", "placeholder": "默认 0.15", "order": 93, "step": 0.05})
     realm_dive_surge_levels: int = Field(
         default=B.REALM_DIVE_SURGE_LEVELS, ge=0, le=100000000,
-        description="「修为暴涨」时提升几级（4 级 = 1 个大境界）。默认 4。",
-        json_schema_extra={"label": "暴涨提升等级数", "placeholder": "默认 4", "order": 95, "step": 1})
+        description="「修为暴涨」时提升的层数。默认 4。",
+        json_schema_extra={"label": "暴涨提升层数", "placeholder": "默认 4", "order": 95, "step": 1})
     realm_dive_fall_levels: int = Field(
         default=B.REALM_DIVE_FALL_LEVELS, ge=0, le=100000000,
-        description="「修为倒退」时跌落几级（4 级 = 1 个大境界）。默认 4。",
-        json_schema_extra={"label": "倒退跌落等级数", "placeholder": "默认 4", "order": 96, "step": 1})
+        description="「修为倒退」时跌落的层数。默认 4。",
+        json_schema_extra={"label": "倒退跌落层数", "placeholder": "默认 4", "order": 96, "step": 1})
     realm_dive_fall_prob: float = Field(
-        default=B.REALM_DIVE_FALL_PROB, description="修为倒退一个大境界（-4 级）的概率。默认 0.10。", ge=0, le=1,
+        default=B.REALM_DIVE_FALL_PROB, description="触发「修为倒退」的概率。默认 0.10。", ge=0, le=1,
         json_schema_extra={"label": "倒退概率", "placeholder": "默认 0.10", "order": 94, "step": 0.05})
     realm_dive_death_prob: float = Field(
         default=B.REALM_DIVE_DEATH_PROB, ge=0, le=1,
@@ -499,8 +520,8 @@ class BalanceHeavenSection(_BalanceBase):
         ),
         json_schema_extra={"label": "天妒触发概率", "placeholder": "默认 1.0", "order": 111, "step": 0.05})
     tian_du_drop_realms: int = Field(
-        default=B.TIAN_DU_DROP_REALMS, description="天妒惩罚：修为倒退几个大境界（1 个 = 4 级）。默认 3。", ge=0, le=100000000,
-        json_schema_extra={"label": "天妒倒退境界数", "placeholder": "默认 3", "order": 111, "step": 1})
+        default=B.TIAN_DU_DROP_REALMS, description="天妒惩罚：修为倒退的层数。默认 3。", ge=0, le=100000000,
+        json_schema_extra={"label": "天妒倒退层数", "placeholder": "默认 3", "order": 111, "step": 1})
     tian_fa_crime_threshold: int = Field(
         default=B.TIAN_FA_CRIME_THRESHOLD, ge=0, le=100000000,
         description=(
@@ -564,12 +585,12 @@ class BalanceBeastSection(_BalanceBase):
         json_schema_extra={"label": "金币上限系数", "placeholder": "默认 5000", "order": 123, "step": 500})
     beast_gain_levels: int = Field(
         default=B.BEAST_GAIN_LEVELS, ge=0, le=100000000,
-        description="修为提升时增加几级（4 级 = 1 个大境界）。默认 4。",
-        json_schema_extra={"label": "提升等级数", "placeholder": "默认 4", "order": 124, "step": 1})
+        description="修为提升时增加的层数。默认 4。",
+        json_schema_extra={"label": "提升层数", "placeholder": "默认 4", "order": 124, "step": 1})
     beast_lose_levels: int = Field(
         default=B.BEAST_LOSE_LEVELS, ge=0, le=100000000,
-        description="境界跌落时减少几级（4 级 = 1 个大境界）。默认 4。",
-        json_schema_extra={"label": "跌落等级数", "placeholder": "默认 4", "order": 125, "step": 1})
+        description="境界跌落时减少的层数。默认 4。",
+        json_schema_extra={"label": "跌落层数", "placeholder": "默认 4", "order": 125, "step": 1})
     beast_gold_prob: float = Field(
         default=B.BEAST_GOLD_PROB, ge=0, le=1,
         description="打怪获得大量金币的概率。默认 0.55。四种结果合计应约等于 1。",
@@ -591,7 +612,7 @@ class BalanceBeastSection(_BalanceBase):
 class BalanceBullySection(_BalanceBase):
     """⑬ 霸凌 —— 高境界者对低境界者的压制，抢点钱并封锁对方行动。
 
-    发起条件：自己的境界必须比对方高 BULLY_LEVEL_GAP 级（默认 8 级 = 2 个大境界）。
+    发起条件：自己的境界必须比对方高出 BULLY_LEVEL_GAP 级。
     """
 
     __ui_label__: ClassVar[str] = "⑬ 霸凌"
@@ -611,7 +632,7 @@ class BalanceBullySection(_BalanceBase):
         json_schema_extra={"label": "周期内霸凌次数", "placeholder": "默认 3", "order": 132, "step": 1})
     bully_level_gap: int = Field(
         default=B.BULLY_LEVEL_GAP, ge=0, le=100000000,
-        description="发起霸凌所需的最小境界差（级）。默认 8（= 2 个大境界）。",
+        description="发起霸凌所需的最小境界差（级）。默认 8。",
         json_schema_extra={"label": "所需境界差（级）", "placeholder": "默认 8", "order": 133, "step": 4})
     bully_ban_seconds: int = Field(
         default=B.BULLY_BAN_SECONDS, ge=0, le=86400,
@@ -642,7 +663,7 @@ class BalanceBullySection(_BalanceBase):
 class BalanceSuppressSection(_BalanceBase):
     """⑭ 镇压 —— 压倒性境界差才能发动，连对方伴侣一起封禁并打落修为。
 
-    发起条件：自己的境界必须比对方高 SUPPRESS_LEVEL_GAP 级（默认 16 级 = 4 个大境界）。
+    发起条件：自己的境界必须比对方高出 SUPPRESS_LEVEL_GAP 级。
     周期按自然日结算（24 小时且与零点对齐）。
     """
 
@@ -666,7 +687,7 @@ class BalanceSuppressSection(_BalanceBase):
         json_schema_extra={"label": "周期内镇压次数", "placeholder": "默认 1", "order": 142, "step": 1})
     suppress_level_gap: int = Field(
         default=B.SUPPRESS_LEVEL_GAP, ge=0, le=100000000,
-        description="发起镇压所需的最小境界差（级）。默认 16（= 4 个大境界）。",
+        description="发起镇压所需的最小境界差（级）。默认 16。",
         json_schema_extra={"label": "所需境界差（级）", "placeholder": "默认 16", "order": 143, "step": 4})
     suppress_ban_seconds: int = Field(
         default=B.SUPPRESS_BAN_SECONDS, ge=0, le=86400,
@@ -682,12 +703,12 @@ class BalanceSuppressSection(_BalanceBase):
         json_schema_extra={"label": "镇压成功率", "placeholder": "默认 0.5", "order": 146, "step": 0.05})
     suppress_drop_levels: int = Field(
         default=B.SUPPRESS_DROP_LEVELS, ge=0, le=100000000,
-        description="镇压成功时，让对方夫妻各自跌落的等级数。默认 4（= 1 个大境界）。",
-        json_schema_extra={"label": "成功时对方跌落等级", "placeholder": "默认 4", "order": 147, "step": 1})
+        description="镇压成功时，让对方夫妻各自跌落的层数。默认 4。",
+        json_schema_extra={"label": "成功时对方跌落层数", "placeholder": "默认 4", "order": 147, "step": 1})
     suppress_fail_self_drop: int = Field(
         default=B.SUPPRESS_FAIL_SELF_DROP, ge=0, le=100000000,
-        description="镇压失败时，自己跌落的等级数。默认 1。",
-        json_schema_extra={"label": "失败时自己跌落等级", "placeholder": "默认 1", "order": 148, "step": 1})
+        description="镇压失败时，自己跌落的层数。默认 1。",
+        json_schema_extra={"label": "失败时自己跌落层数", "placeholder": "默认 1", "order": 148, "step": 1})
     suppress_pay_ratio_min: float = Field(
         default=B.SUPPRESS_PAY_RATIO_MIN, ge=0, le=1,
         description="镇压失败时，赔给对方「自己现有金币」的比例下限。默认 0.10。",

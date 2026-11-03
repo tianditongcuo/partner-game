@@ -20,6 +20,7 @@ from .realms import (
     is_major_boundary,
     is_max_level,
     rate_percent,
+    realm_index,
     realm_name,
 )
 from .utils import PersistStore, fetch_avatar_base64, format_user_display
@@ -696,9 +697,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         before = user["level"]
         drop = int(B.TIAN_DU_DROP_REALMS) * 4
         user["level"] = max(0, before - drop)
-        return ("\n\n⚡ 天妒降下！你今日连破 %d 境，天道不容，"
-                "修为倒退 %d 个大境界（【%s】→【%s】）。" %
-                (count, B.TIAN_DU_DROP_REALMS, realm_name(before), realm_name(user["level"])))
+        return ("\n\n⚡ 天妒降下！你今日连破 数境，天道不容，"
+                "修为倒退（【%s】→【%s】）。" %
+                (realm_name(before), realm_name(user["level"])))
 
     def _check_tian_fa(self, group_id: str, qq: str, user: dict):
         """每次犯罪后调用：本周期犯罪次数超过阈值则「天罚」，扣现有金币。"""
@@ -776,8 +777,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         b["money"] += money
         a["level"] = max(0, a["level"] - levels)
         b["level"] = min(MAX_LEVEL, b["level"] + levels)
-        return ("\n\n💔 离婚惩罚生效：你分给对方 %d 金币与 %d 级修为"
-                "（对方现有 %d 金币、%s）。" % (money, levels, b["money"], realm_name(b["level"])))
+        return ("\n\n💔 离婚惩罚生效：你分给对方 %d 金币，并让对方修为上涨"
+                "（对方现有 %d 金币、%s）。" % (money, b["money"], realm_name(b["level"])))
 
     def _calc_fine(self, payer_money: int, floor: int, cap_ratio: float) -> int:
         """按「该行动专属」的罚款规则算金额。
@@ -1492,7 +1493,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             # Random chance to get injured if picking a fight and failing
             if recharge <= 0 and not is_forced and random.random() < B.ROB_WIFE_DROP_CHANCE and sender_data["level"] > 0:
                 sender_data["level"] -= 1
-                injury_msg = "\n并且你被反杀成重伤，境界跌落了1层！"
+                injury_msg = "\n并且你被反杀成重伤，境界跌落！"
                 
             if cfg.persist_enabled:
                 await self._store.save()
@@ -1752,8 +1753,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"7. /强娶 @某人 —— 概率硬绑单身者，失败罚款（门槛 {B.FORCE_GATE}）\n"
             f"8. /抢老婆 @某人 —— 抢别人的伴侣，受战力差与好感护盾影响（门槛 {B.ROB_WIFE_GATE}）\n"
             f"9. /打劫 @某人 —— 抢金币，可把对方打成负债（每周期 {B.ROB_MONEY_LIMIT} 次，门槛 {B.ROB_MONEY_GATE}）\n"
-            f"10. /霸凌 @某人 —— 需高 {B.BULLY_LEVEL_GAP} 级（2 个大境界）：抢钱并封禁对方 {B.BULLY_BAN_SECONDS} 秒\n"
-            f"11. /镇压 @某人 —— 需高 {B.SUPPRESS_LEVEL_GAP} 级（4 个大境界）：封禁对方与伴侣，并打落修为\n"
+            f"10. /霸凌 @某人 —— 需高出对方 {B.BULLY_LEVEL_GAP} 级：抢钱并封禁对方 {B.BULLY_BAN_SECONDS} 秒\n"
+            f"11. /镇压 @某人 —— 需高出对方 {B.SUPPRESS_LEVEL_GAP} 级：封禁对方与伴侣，并打落修为\n"
             "12. /打劫胜率 @某人 ｜ /抢老婆胜率 @某人 —— 精算成功率，含氪金加成\n"
             "\n"
             "【💰 经济】\n"
@@ -1768,8 +1769,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             "【🌌 天道】\n"
             f"19. /贷款 <金额> —— 借多少都行，{B.LOAN_GRACE_MINUTES} 分钟内要还 {repay_text} 倍，逾期封禁行动\n"
             "20. /还贷 —— 一次性结清，不支持分期\n"
-            f"21. /下秘境 —— 金币 / 修为暴涨 {B.REALM_DIVE_SURGE_LEVELS} 级 / 倒退 {B.REALM_DIVE_FALL_LEVELS} 级 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
-            f"22. /打怪 —— 金币 / 修为 +{B.BEAST_GAIN_LEVELS} 级 / 修为 -{B.BEAST_LOSE_LEVELS} 级 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
+            f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
+            f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
             f"23. /重生 —— 保留 {round(B.REBIRTH_KEEP_RATIO*100)}% 修为，其余全部重置（陨落时自动触发）\n"
             "\n"
             "【💕 夫妻】\n"
@@ -1792,7 +1793,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"最多抵 {round(B.AFFECTION_SHIELD_MAX*100)}%\n"
             f"💸 失败罚款：下限 {B.FORCE_FINE_FLOOR} 起（各行动可分别配置），最多罚光现有金币；其中 "
             f"{round(B.FINE_COMPENSATION_RATIO*100)}% 赔给对手\n"
-            f"⚡ 天妒：一周期修炼成功 {B.TIAN_DU_SUCCESS_THRESHOLD} 次 → 倒退 {B.TIAN_DU_DROP_REALMS} 个大境界\n"
+            f"⚡ 天妒：一周期修炼成功 {B.TIAN_DU_SUCCESS_THRESHOLD} 次 → 修为倒退\n"
             f"⚡ 天罚：一周期犯罪超过 {B.TIAN_FA_CRIME_THRESHOLD} 次 → 扣 {round(B.TIAN_FA_MONEY_RATIO*100)}% 金币\n"
             "🔒 贷款逾期或被霸凌/镇压封禁时，只能 /打工、/下秘境、/还贷、/重生"
         )
@@ -1941,7 +1942,21 @@ class PartnerGamePlugin(MaiBotPlugin):
         recharge = self._take_recharge(user_data)     # 氪金加成（一次性）
         tian_du_msg = ""
         
-        if is_major_breakthrough:
+        # 雷劫：只有指定境界的「大境界突破」才会遇到；氪金加成可等量降低雷劫概率
+        trib_prob = B.TRIBULATION_PROB
+        if recharge:
+            trib_prob = max(0.0, trib_prob - recharge)
+
+        if is_major_breakthrough and realm_index(level) == B.TRIBULATION_REALM_INDEX \
+                and random.random() < trib_prob:
+            before = level
+            drop = min(before, max(0, int(B.TRIBULATION_DROP_LEVELS)))
+            user_data["level"] = before - drop
+            msg = (f"⚡ 雷劫降下！你在冲击【{realm_name(level + 1)}】时引动天罚，"
+                   f"九霄雷霆轰然落下……\n"
+                   f"你勉强保命，但修为跌落"
+                   f"（【{realm_name(before)}】→【{realm_name(user_data['level'])}】）。")
+        elif is_major_breakthrough:
             # 40% success
             if random.random() < min(B.RECHARGE_CAP, B.MAJOR_SUCCESS_RATE + recharge):
                 user_data["level"] += 1
@@ -1951,7 +1966,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 # Failed, 30% chance drop
                 if random.random() < B.MAJOR_FAIL_DROP_RATE and user_data["level"] > 0:
                     user_data["level"] -= 1
-                    msg = "突破失败！你急于求成导致走火入魔，根基受损，境界跌落了 1 层！"
+                    msg = "突破失败！你急于求成导致走火入魔，根基受损，境界跌落！"
                 else:
                     msg = "突破失败！瓶颈太过坚固，你气血翻涌，未能突破。"
         else:
@@ -2508,12 +2523,12 @@ class PartnerGamePlugin(MaiBotPlugin):
         elif roll < p_gold + p_surge:
             before = level
             user["level"] = min(MAX_LEVEL, level + B.REALM_DIVE_SURGE_LEVELS)
-            msg = (f"秘境中偶得大能遗蜕，你吸收其道韵，修为暴涨一个大境界！"
+            msg = (f"秘境中偶得大能遗蜕，你吸收其道韵，修为暴涨！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         elif roll < p_gold + p_surge + p_fall:
             before = level
             user["level"] = max(0, level - B.REALM_DIVE_FALL_LEVELS)
-            msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退一个大境界！"
+            msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
             before, after = self._rebirth(group_id, sender_qq, "秘境陨落")
@@ -2723,12 +2738,12 @@ class PartnerGamePlugin(MaiBotPlugin):
         elif roll < p_gold + p_gain:
             before = user["level"]
             user["level"] = min(MAX_LEVEL, before + B.BEAST_GAIN_LEVELS)
-            msg = (f"激战中你顿悟了一丝道韵，修为提升 {B.BEAST_GAIN_LEVELS} 级！"
+            msg = (f"激战中你顿悟了一丝道韵，修为提升！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         elif roll < p_gold + p_gain + p_lose:
             before = user["level"]
             user["level"] = max(0, before - B.BEAST_LOSE_LEVELS)
-            msg = (f"你被怪物重创，狼狈逃回，修为跌落 {B.BEAST_LOSE_LEVELS} 级！"
+            msg = (f"你被怪物重创，狼狈逃回，修为跌落！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
             before, after = self._rebirth(group_id, sender_qq, "打怪陨落")
@@ -2807,7 +2822,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(
                 group_id,
                 f"境界压制不足（你的 {realm_name(attacker['level'])} vs 对方 {realm_name(victim['level'])}，"
-                f"相差 {gap} 级，需要 {B.BULLY_LEVEL_GAP} 级 = 2 个大境界）。",
+                f"相差 {gap} 级，需要 {B.BULLY_LEVEL_GAP} 级）。",
                 sender_qq, "")
             return True, "Gap too small", 2
 
@@ -2876,7 +2891,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(
                 group_id,
                 f"境界不足以镇压（你 {realm_name(attacker['level'])} vs 对方 {realm_name(victim['level'])}，"
-                f"相差 {gap} 级，需要 {B.SUPPRESS_LEVEL_GAP} 级 = 4 个大境界）。",
+                f"相差 {gap} 级，需要 {B.SUPPRESS_LEVEL_GAP} 级）。",
                 sender_qq, "")
             return True, "Gap too small", 2
 
@@ -2907,13 +2922,13 @@ class PartnerGamePlugin(MaiBotPlugin):
                 msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
                        f"对方被封禁 {B.SUPPRESS_BAN_SECONDS} 秒，"
                        f"其伴侣也被一并封禁 {B.SUPPRESS_PARTNER_BAN_SECONDS} 秒；\n"
-                       f"夫妻二人修为各跌落 {B.SUPPRESS_DROP_LEVELS} 级"
+                       f"夫妻二人修为各跌落"
                        f"（【{realm_name(victim_before)}】→【{realm_name(victim['level'])}】）。")
             else:
                 # 单身版：没有伴侣可牵连，只罚本人
                 msg = (f"【{sender_qq}】悍然镇压了【{nick}({target_qq})】！\n"
                        f"对方孤身一人、无人分担，被封禁 {B.SUPPRESS_BAN_SECONDS} 秒，"
-                       f"修为跌落 {B.SUPPRESS_DROP_LEVELS} 级"
+                       f"修为跌落"
                        f"（【{realm_name(victim_before)}】→【{realm_name(victim['level'])}】）。")
         else:
             ratio = random.uniform(B.SUPPRESS_PAY_RATIO_MIN, B.SUPPRESS_PAY_RATIO_MAX)
@@ -2922,7 +2937,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             victim["money"] += pay
             attacker["level"] = max(0, attacker["level"] - B.SUPPRESS_FAIL_SELF_DROP)
             msg = (f"【{sender_qq}】的镇压被【{nick}({target_qq})】反制！\n"
-                   f"赔付 {pay} 金币（{round(ratio * 100, 1)}%），自身境界跌落 {B.SUPPRESS_FAIL_SELF_DROP} 级。")
+                   f"赔付 {pay} 金币（{round(ratio * 100, 1)}%），自身境界跌落。")
 
         if self.config.partner_game.persist_enabled:
             await self._store.save()

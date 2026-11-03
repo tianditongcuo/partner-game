@@ -570,6 +570,44 @@ async def run(mod, pkg):
     ok &= ("孤身" in single_msg and "夫妻" not in single_msg and "伴侣" not in single_msg)
     results.append(("镇压文案·单身", single_msg.splitlines()[-1][:26], "不应出现「夫妻/伴侣」"))
 
+    # ---- 雷劫：元婴期大境界突破必遇 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 99999, "level": 39, "last_allowance": today}   # 元婴圆满
+    with patch.object(random, "random", return_value=0.0):
+        await p.handle_cultivate(stream_id="", message={"processed_plain_text": "/修炼"})
+    trib_ok = (users["u1"]["level"] == 39 - B.TRIBULATION_DROP_LEVELS
+               and "雷劫" in rec.msgs[-1])
+    ok &= bool(trib_ok)
+    results.append(("雷劫·元婴", "39→%s，文案含雷劫" % users["u1"]["level"], "应触发并跌落"))
+
+    # ---- 雷劫不波及别的大境界（婴变圆满 43）----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 99999, "level": 43, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.0):
+        await p.handle_cultivate(stream_id="", message={"processed_plain_text": "/修炼"})
+    ok &= (users["u1"]["level"] == 44 and "雷劫" not in rec.msgs[-1])
+    results.append(("雷劫·范围", "43→%s" % users["u1"]["level"], "婴变期不应遇雷劫"))
+
+    # ---- 小境界突破不触发雷劫（元婴后期 38）----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 99999, "level": 38, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.0):
+        await p.handle_cultivate(stream_id="", message={"processed_plain_text": "/修炼"})
+    ok &= (users["u1"]["level"] == 39 and "雷劫" not in rec.msgs[-1])
+    results.append(("雷劫·小境界", "38→%s" % users["u1"]["level"], "小境界不应遇雷劫"))
+
+    # ---- 氪金可降低雷劫概率 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 99999, "level": 39, "last_allowance": today, "recharge": 0.5}
+    with patch.object(random, "random", return_value=0.7):
+        await p.handle_cultivate(stream_id="", message={"processed_plain_text": "/修炼"})
+    ok &= (users["u1"]["level"] == 40 and "雷劫" not in rec.msgs[-1])
+    results.append(("氪金续命", "39→%s" % users["u1"]["level"], "0.5 加成应挡掉雷劫并突破"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:
