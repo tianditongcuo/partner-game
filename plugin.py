@@ -1224,7 +1224,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         prob = max(B.FORCE_FLOOR, min(B.FORCE_CAP, prob))
         recharge = self._take_recharge(sender_data)      # 氪金加成（用于失败免罚判断）
-        prob = min(B.RECHARGE_CAP, prob + recharge)
+        prob = min(1.0, prob + recharge)
 
         if random.random() < prob:
             target_nick = await self._get_member_nick(group_id, target_qq)
@@ -1565,7 +1565,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             forced=is_forced,
         )
             
-        battle = battle._replace(final_prob=min(B.RECHARGE_CAP, battle.final_prob + pending)) \
+        battle = battle._replace(final_prob=min(1.0, battle.final_prob + pending)) \
             if pending else battle
         target_nick = await self._get_member_nick(group_id, target_qq)
 
@@ -1707,7 +1707,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             forced=is_forced,
         )
         if pending:
-            battle = battle._replace(final_prob=min(B.RECHARGE_CAP, battle.final_prob + pending))
+            battle = battle._replace(final_prob=min(1.0, battle.final_prob + pending))
             
         target_nick = await self._get_member_nick(group_id, target_qq)
 
@@ -1763,8 +1763,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             "15. /我的状态 —— 境界 / 金币 / 次数 / 债务 / 封禁\n"
             "16. /上交存款 <金额> —— 把金币交给伴侣\n"
             "17. /送钱 @某人 <金额> —— 直接转给任何人\n"
-            f"18. /氪金<金额> —— 买下一次行动的成功率：每 {B.RECHARGE_COINS_PER_PERCENT} 金币 +1%，上限 {round(B.RECHARGE_CAP*100)}%\n"
-            "     作用于下一次 /打劫、/强娶、/下秘境、/修炼；用了氪金的这次失败不罚款\n"
+            f"18. /氪金<金额> —— 为下一次行动积攒好运，最低 {B.RECHARGE_MIN_AMOUNT} 金币\n"
+            "     作用于下一次 /打劫、/强娶、/下秘境、/修炼、/打怪；用了氪金的这次失败不罚款\n"
             "\n"
             "【🌌 天道】\n"
             f"19. /贷款 <金额> —— 借多少都行，{B.LOAN_GRACE_MINUTES} 分钟内要还 {repay_text} 倍，逾期封禁行动\n"
@@ -1958,7 +1958,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                    f"（【{realm_name(before)}】→【{realm_name(user_data['level'])}】）。")
         elif is_major_breakthrough:
             # 40% success
-            if random.random() < min(B.RECHARGE_CAP, B.MAJOR_SUCCESS_RATE + recharge):
+            if random.random() < min(1.0, B.MAJOR_SUCCESS_RATE + recharge):
                 user_data["level"] += 1
                 msg = f"突破成功！天降祥瑞，你成功迈入了【{realm_name(user_data['level'])}】！"
                 tian_du_msg = self._check_tian_du(group_id, sender_qq, user_data) or ""
@@ -1971,7 +1971,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                     msg = "突破失败！瓶颈太过坚固，你气血翻涌，未能突破。"
         else:
             # 80% success
-            if random.random() < min(B.RECHARGE_CAP, B.MINOR_SUCCESS_RATE + recharge):
+            if random.random() < min(1.0, B.MINOR_SUCCESS_RATE + recharge):
                 user_data["level"] += 1
                 msg = f"修炼顺利！你稳扎稳打，达到了【{realm_name(user_data['level'])}】。"
                 tian_du_msg = self._check_tian_du(group_id, sender_qq, user_data) or ""
@@ -2673,7 +2673,7 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         current = float(user.get("recharge", 0) or 0)
         if current >= B.RECHARGE_CAP:
-            await self._send_avatar_msg(group_id, "你的加成已经到顶了，先用掉再说吧。", sender_qq, "")
+            await self._send_avatar_msg(group_id, "你的好运已经攒满了，先去做点什么用掉它吧。", sender_qq, "")
             return True, "Maxed", 2
 
         user["money"] -= amount
@@ -2683,9 +2683,8 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         await self._send_avatar_msg(
             group_id,
-            f"氪金 {amount} 成功！当前待用加成 【{round(total * 100, 2)}%】（上限 {round(B.RECHARGE_CAP * 100)}%），"
-            f"剩余金币 {user['money']}。\n"
-            f"该加成作用于下一次 /打劫、/强娶、/下秘境 或 /修炼，用掉即清零。",
+            f"氪金 {amount} 成功！灵气加身，剩余金币 {user['money']}。\n"
+            f"这份好运作用于下一次 /打劫、/强娶、/下秘境、/修炼 或 /打怪，用掉即清零。",
             sender_qq, "")
         return True, "Recharged", 2
 
@@ -2727,7 +2726,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         total = p_gold + p_gain + p_lose + p_death
         if total <= 0:
             total = 1.0
+        recharge = self._take_recharge(user)     # 氪金：把结果推向更好的分支
         roll = random.random() * total
+        roll = max(0.0, roll - recharge)
 
         if roll < p_gold:
             lo = max(1, level * B.BEAST_MONEY_MIN_FACTOR)

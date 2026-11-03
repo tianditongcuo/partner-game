@@ -9,7 +9,7 @@
 | 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 35 |
-| plugin.py | 2949 行 |
+| plugin.py | 2950 行 |
 | config.py | 764 行 |
 | utils.py | 137 行 |
 | __init__.py | 2 行 |
@@ -21,9 +21,9 @@
 
 | 域 | 职责 | 指令数 | 代码行 | 关键位置 |
 |---|---|---:|---:|---|
-| **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | 2 | 91 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
+| **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | 2 | 93 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
 | **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 9 | 650 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
-| **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 7 | 314 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
+| **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 7 | 313 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
 | **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 2 | 141 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
 | **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 6 | 499 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
 | **惩罚与限次** | 冷却、每日次数、罚款、掉级 | — | 0 | `plugin.py:376-386`；`plugin.py:343-373`；`见各 handler` |
@@ -170,11 +170,11 @@
 | `realm_dive` |  | 修仙成长 | 2488 | 59 | 3 | daily_usage、users | persist_enabled | — |
 | `mating_request` |  | 婚姻关系 | 2548 | 52 | 6 | daily_usage、marriages | — | — |
 | `mating_reply` |  | 婚姻关系 | 2602 | 48 | 5 | marriages | persist_enabled | — |
-| `recharge` |  | 经济财富 | 2651 | 44 | 5 | users | persist_enabled | — |
-| `beast` |  | 入口与路由 | 2696 | 64 | 5 | daily_usage、users | persist_enabled | — |
-| `rebirth` |  | 入口与路由 | 2761 | 27 | 2 | — | persist_enabled | — |
-| `bully` |  | 战斗结算 | 2789 | 68 | 9 | daily_usage、users | persist_enabled | — |
-| `suppress` |  | 战斗结算 | 2858 | 88 | 9 | daily_usage、marriages、users | persist_enabled | — |
+| `recharge` |  | 经济财富 | 2651 | 43 | 5 | users | persist_enabled | — |
+| `beast` |  | 入口与路由 | 2695 | 66 | 5 | daily_usage、users | persist_enabled | — |
+| `rebirth` |  | 入口与路由 | 2762 | 27 | 2 | — | persist_enabled | — |
+| `bully` |  | 战斗结算 | 2790 | 68 | 9 | daily_usage、users | persist_enabled | — |
+| `suppress` |  | 战斗结算 | 2859 | 88 | 9 | daily_usage、marriages、users | persist_enabled | — |
 
 ## 3. 数据模型
 

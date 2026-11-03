@@ -29,8 +29,8 @@ give_money,handle_give_money,经济财富,2433,53,9,,users,persist_enabled,,give
 realm_dive,handle_realm_dive,修仙成长,2487,59,3,,daily_usage|users,persist_enabled,,,Y,Y
 mating_request,handle_mating_request,婚姻关系,2547,52,6,,daily_usage|marriages,,,,,
 mating_reply,handle_mating_reply,婚姻关系,2601,48,5,,marriages,persist_enabled,,,,
-recharge,handle_recharge,经济财富,2650,44,5,,users,persist_enabled,,,,
-beast,handle_beast,入口与路由,2695,64,5,,daily_usage|users,persist_enabled,,beast,Y,Y
-rebirth,handle_rebirth,入口与路由,2760,27,2,,,persist_enabled,,,,
-bully,handle_bully,战斗结算,2788,68,9,,daily_usage|users,persist_enabled,,bully,Y,
-suppress,handle_suppress,战斗结算,2857,88,9,,daily_usage|marriages|users,persist_enabled,,suppress,Y,Y
+recharge,handle_recharge,经济财富,2650,43,5,,users,persist_enabled,,,,
+beast,handle_beast,入口与路由,2694,66,5,,daily_usage|users,persist_enabled,,beast,Y,Y
+rebirth,handle_rebirth,入口与路由,2761,27,2,,,persist_enabled,,,,
+bully,handle_bully,战斗结算,2789,68,9,,daily_usage|users,persist_enabled,,bully,Y,
+suppress,handle_suppress,战斗结算,2858,88,9,,daily_usage|marriages|users,persist_enabled,,suppress,Y,Y

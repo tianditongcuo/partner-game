@@ -90,7 +90,7 @@ def resolve(kind, attack_level, defend_level, affection=0, base_prob=0.0, forced
     :param affection: 夫妻好感度（只有抢老婆吃这个）
     :param base_prob: 配置里的基础概率
     :param forced: 是否命中 forced_wives 黑幕
-    :param bonus: 氪金带来的额外胜率（可突破常规上限，但不超过 RECHARGE_CAP）
+    :param bonus: 氪金带来的额外胜率（可突破常规上限，最高到 100%）
     """
     rule = _RULES[kind]
     atk_p = power(attack_level)
@@ -108,6 +108,6 @@ def resolve(kind, attack_level, defend_level, affection=0, base_prob=0.0, forced
     final = base_prob + power_gain - shield
     final = max(lo, min(hi, final))
     if bonus:                       # 氪金：在常规钳制之后再叠加，可以突破 90% 上限
-        final = min(B.RECHARGE_CAP, final + bonus)
+        final = min(1.0, final + bonus)
 
     return CombatResult(kind, atk_p, dfd_p, delta, power_gain, shield, final, False)

@@ -608,6 +608,52 @@ async def run(mod, pkg):
     ok &= (users["u1"]["level"] == 40 and "雷劫" not in rec.msgs[-1])
     results.append(("氪金续命", "39→%s" % users["u1"]["level"], "0.5 加成应挡掉雷劫并突破"))
 
+    # ---- 氪金满额：强娶必定成功（random 0.999 也过）----
+    reset()
+    store.data["marriages"] = {}  # 清掉前面用例留下的婚姻关系
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    users["u1"] = {"money": 99999, "level": 10, "last_allowance": today, "recharge": 0.99}
+    users["u2"] = {"money": 100, "level": 0, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.999), \
+         patch.object(random, "randint", return_value=100):
+        await p.handle_force_marry(stream_id="", message={"processed_plain_text": "/强娶 @u2"})
+    married = str(store.data.get("marriages", {}).get(G, {}).get("u1", {}).get("wife_uid")) == "u2"
+    ok &= bool(married)
+    results.append(("氪金满额·强娶", "已绑定=%s" % married, "0.99 加成应必定成功"))
+
+    # ---- 氪金满额：打怪不会跌落 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 1000, "level": 40, "last_allowance": today, "recharge": 0.99}
+    with patch.object(random, "random", return_value=0.999), \
+         patch.object(random, "randint", return_value=500):
+        await p.handle_beast(stream_id="", message={"processed_plain_text": "/打怪"})
+    beast_safe = (users["u1"]["level"] == 40 and "recharge" not in users["u1"])
+    ok &= bool(beast_safe)
+    results.append(("氪金满额·打怪", "等级=%s 加成已消耗=%s" % (users["u1"]["level"], "recharge" not in users["u1"]),
+                    "不应跌落且加成用掉"))
+
+    # ---- 氪金满额：秘境不会跌落 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 1000, "level": 40, "last_allowance": today, "recharge": 0.99}
+    with patch.object(random, "random", return_value=0.999), \
+         patch.object(random, "randint", return_value=500):
+        await p.handle_realm_dive(stream_id="", message={"processed_plain_text": "/下秘境"})
+    dive_safe = (users["u1"]["level"] == 40 and "recharge" not in users["u1"])
+    ok &= bool(dive_safe)
+    results.append(("氪金满额·秘境", "等级=%s" % users["u1"]["level"], "不应跌落"))
+
+    # ---- 氪金文案不含百分比 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 99999, "level": 10, "last_allowance": today}
+    await p.handle_recharge(stream_id="", message={"processed_plain_text": "/氪金 1000"})
+    txt = rec.msgs[-1]
+    ok &= ("%" not in txt and "氪金" in txt)
+    results.append(("氪金文案", txt.splitlines()[0][:22], "不应出现百分比"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:
