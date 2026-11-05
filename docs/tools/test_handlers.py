@@ -746,6 +746,36 @@ async def run(mod, pkg):
     results.append(("成圣·已封顶", r[1], "到上限应拒绝且不扣钱"))
     B.SAINT_MAX_LEVEL = 99                      # 还原默认，避免影响后续用例
 
+    # ---- 贷款额度：等级 × 系数 ----
+    reset()
+    store.data["marriages"] = {}
+    ctx("u1")
+    cap10 = 10 * B.LOAN_CAP_PER_LEVEL
+    users["u1"] = {"money": 0, "level": 10, "last_allowance": today}
+    r = await p.handle_loan(stream_id="", message={"processed_plain_text": "/贷款 %d" % (cap10 + 1)})
+    over = (r[1] == "Over cap" and users["u1"]["money"] == 0)
+    r2 = await p.handle_loan(stream_id="", message={"processed_plain_text": "/贷款 %d" % cap10})
+    granted = (r2[1] == "Loan granted" and users["u1"]["money"] == cap10)
+    ok &= bool(over and granted)
+    results.append(("贷款额度", "10级额度=%s 超额=%s 满额放款=%s" % (cap10, r[1], r2[1]),
+                    "恰好额度内可借，超一分被拒"))
+
+    # ---- 贷款额度：0 级借不到 ----
+    reset()
+    ctx("u2")
+    users["u2"] = {"money": 0, "level": 0, "last_allowance": today}
+    r = await p.handle_loan(stream_id="", message={"processed_plain_text": "/贷款 100"})
+    ok &= (r[1] == "Low realm" and users["u2"]["money"] == 0)
+    results.append(("贷款·0级", r[1], "无境界应借不到"))
+
+    # ---- 贷款额度：等级越高额度越大 ----
+    reset()
+    ctx("u3")
+    users["u3"] = {"money": 0, "level": 50, "last_allowance": today}
+    r = await p.handle_loan(stream_id="", message={"processed_plain_text": "/贷款 %d" % (50 * B.LOAN_CAP_PER_LEVEL)})
+    ok &= (r[1] == "Loan granted" and users["u3"]["money"] == 50 * B.LOAN_CAP_PER_LEVEL)
+    results.append(("贷款·高境界", "50级借 %s" % users["u3"]["money"], "额度随等级提升"))
+
     # ---- 天妒：同周期内只触发一次 ----
     reset()
     store.data["daily_usage"] = {}

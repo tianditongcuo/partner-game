@@ -9,11 +9,11 @@
 | 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 36 |
-| plugin.py | 3087 行 |
-| config.py | 815 行 |
+| plugin.py | 3107 行 |
+| config.py | 822 行 |
 | utils.py | 137 行 |
 | __init__.py | 2 行 |
-| 配置项 | 138 |
+| 配置项 | 139 |
 | 持久化表 | marriages、users、daily_usage、last_date |
 | 测试 | 0 |
 
@@ -23,11 +23,11 @@
 |---|---|---:|---:|---|
 | **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | 2 | 91 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
 | **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 9 | 650 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
-| **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 7 | 327 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
+| **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 7 | 345 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
 | **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 3 | 232 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
 | **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 6 | 503 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
 | **惩罚与限次** | 冷却、每日次数、罚款、掉级 | — | 0 | `plugin.py:376-386`；`plugin.py:343-373`；`见各 handler` |
-| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 253 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
+| **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 255 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
 | **数据与持久化** | JSON 存档、防抖写盘、跨日重置 | — | 0 | `utils.py:50-113`；`utils.py:81-104`；`plugin.py:348-355` |
 | **配置** | 17 个可调参数与管理员/白名单 | — | 0 | `config.py:8-19`；`config.py:24-38`；`config.py:39-48, 94-102` |
 | **管理运维** | 重置、全服补偿、定向发钱 | 3 | 129 | `plugin.py:1728-1732`；`plugin.py:1719-1761`；`plugin.py:1763-1796` |
@@ -163,19 +163,19 @@
 | `admin_reset` | 重置 | 管理运维 | 2198 | 59 | 5 | daily_usage、marriages、users | admin_users、persist_enabled | — |
 | `admin_compensate` | 全服补偿 | 管理运维 | 2259 | 33 | 3 | users | admin_users、persist_enabled | — |
 | `admin_give_money` | 发钱/扣钱 | 管理运维 | 2294 | 37 | 5 | users | admin_users、persist_enabled | — |
-| `game_info` | 游戏机制 | 展示与输出 | 2333 | 55 | 1 | — | force_marry_probability、rob_wife_probability | — |
-| `loan` |  | 经济财富 | 2389 | 43 | 5 | users | persist_enabled | — |
-| `repay` |  | 经济财富 | 2434 | 37 | 4 | users | persist_enabled | — |
-| `give_money` |  | 经济财富 | 2472 | 53 | 9 | users | persist_enabled | — |
-| `realm_dive` |  | 修仙成长 | 2526 | 65 | 5 | daily_usage、users | persist_enabled | — |
-| `mating_request` |  | 婚姻关系 | 2592 | 52 | 6 | daily_usage、marriages | — | — |
-| `mating_reply` |  | 婚姻关系 | 2646 | 48 | 5 | marriages | persist_enabled | — |
-| `recharge` |  | 经济财富 | 2695 | 48 | 6 | users | persist_enabled | — |
-| `beast` |  | 入口与路由 | 2744 | 65 | 5 | daily_usage、users | persist_enabled | — |
-| `rebirth` |  | 入口与路由 | 2810 | 26 | 2 | — | persist_enabled | — |
-| `bully` |  | 战斗结算 | 2837 | 68 | 9 | daily_usage、users | persist_enabled | — |
-| `suppress` |  | 战斗结算 | 2906 | 92 | 9 | daily_usage、marriages、users | persist_enabled | — |
-| `saint` |  | 修仙成长 | 2999 | 85 | 8 | daily_usage、users | persist_enabled | — |
+| `game_info` | 游戏机制 | 展示与输出 | 2333 | 57 | 1 | — | force_marry_probability、rob_wife_probability | — |
+| `loan` |  | 经济财富 | 2391 | 61 | 7 | users | persist_enabled | — |
+| `repay` |  | 经济财富 | 2454 | 37 | 4 | users | persist_enabled | — |
+| `give_money` |  | 经济财富 | 2492 | 53 | 9 | users | persist_enabled | — |
+| `realm_dive` |  | 修仙成长 | 2546 | 65 | 5 | daily_usage、users | persist_enabled | — |
+| `mating_request` |  | 婚姻关系 | 2612 | 52 | 6 | daily_usage、marriages | — | — |
+| `mating_reply` |  | 婚姻关系 | 2666 | 48 | 5 | marriages | persist_enabled | — |
+| `recharge` |  | 经济财富 | 2715 | 48 | 6 | users | persist_enabled | — |
+| `beast` |  | 入口与路由 | 2764 | 65 | 5 | daily_usage、users | persist_enabled | — |
+| `rebirth` |  | 入口与路由 | 2830 | 26 | 2 | — | persist_enabled | — |
+| `bully` |  | 战斗结算 | 2857 | 68 | 9 | daily_usage、users | persist_enabled | — |
+| `suppress` |  | 战斗结算 | 2926 | 92 | 9 | daily_usage、marriages、users | persist_enabled | — |
+| `saint` |  | 修仙成长 | 3019 | 85 | 8 | daily_usage、users | persist_enabled | — |
 
 ## 3. 数据模型
 

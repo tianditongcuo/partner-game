@@ -497,6 +497,13 @@ class BalanceLoanSection(_BalanceBase):
         default=B.LOAN_GRACE_MINUTES, ge=0, le=100000000,
         description="贷款时限（分钟）。超时未还清只能 /打工 /下秘境 /还贷，直到结清。默认 15。",
         json_schema_extra={"label": "贷款时限（分钟）", "placeholder": "默认 15", "order": 101, "step": 5})
+    loan_cap_per_level: int = Field(
+        default=B.LOAN_CAP_PER_LEVEL, ge=0, le=10000000,
+        description=(
+            "贷款额度系数：可借上限 = 当前境界等级 × 本值。默认 1000（10 级最多借 10000）。\n"
+            "境界越高额度越大；填 0 = 不限额度（回到旧版无限借款）。"
+        ),
+        json_schema_extra={"label": "贷款额度（等级×本值）", "placeholder": "默认 1000", "order": 102, "step": 100})
 
 
 class BalanceHeavenSection(_BalanceBase):

@@ -1792,7 +1792,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "     作用于下一次 /打劫、/强娶、/下秘境、/修炼、/打怪；用了氪金的这次失败不罚款\n"
             "\n"
             "【🌌 天道】\n"
-            f"19. /贷款 <金额> —— 借多少都行，{B.LOAN_GRACE_MINUTES} 分钟内要还 {repay_text} 倍，逾期封禁行动\n"
+            f"19. /贷款 <金额> —— 额度 = 当前境界等级 × {B.LOAN_CAP_PER_LEVEL}，{B.LOAN_GRACE_MINUTES} 分钟内要还 {repay_text} 倍，逾期封禁行动\n"
             "20. /还贷 —— 一次性结清，不支持分期\n"
             f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
             f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
@@ -2362,6 +2362,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"每周期限 {B.WORK_LIMIT} 次。\n"
             f"• 约会消耗：每次 {B.DATE_COST} 金币，增加 {B.DATE_AFF_MIN}~{B.DATE_AFF_MAX} 点好感度，"
             f"每周期限 {B.DATE_LIMIT} 次。\n"
+            f"• 天道贷款：额度 = 当前境界等级 × {B.LOAN_CAP_PER_LEVEL} 金币，"
+            f"{B.LOAN_GRACE_MINUTES} 分钟内须还 {B.LOAN_REPAY_MULTIPLIER:g} 倍，逾期封禁行动。\n"
             "---\n"
             "😈【互动犯罪机制】\n"
             f"• 强娶：基础概率 {prob_force}%。资金门槛 {B.FORCE_GATE}，"
@@ -2415,6 +2417,24 @@ class PartnerGamePlugin(MaiBotPlugin):
                 f"你还有一笔贷款没还清（本金 {loan['principal']}，需还 {awaited}），天道不批新的贷款。",
                 sender_qq, "")
             return True, "Has loan", 2
+
+        # 额度 = 当前境界等级 × 系数；系数为 0 表示不限
+        cap = 0
+        if B.LOAN_CAP_PER_LEVEL > 0:
+            cap = max(0, int(user["level"] * B.LOAN_CAP_PER_LEVEL))
+            if cap <= 0:
+                await self._send_avatar_msg(
+                    group_id,
+                    "你的境界还太低，天道不肯借你一分钱——先去 /修炼 涨涨修为吧。",
+                    sender_qq, "")
+                return True, "Low realm", 2
+            if amount > cap:
+                await self._send_avatar_msg(
+                    group_id,
+                    f"你当前境界为【{realm_name(user['level'])}】，最多只能借 {cap} 金币"
+                    f"（境界等级 × {B.LOAN_CAP_PER_LEVEL}），你说的 {amount} 超出额度了。",
+                    sender_qq, "")
+                return True, "Over cap", 2
 
         user["money"] += amount
         user["loan"] = {"principal": amount, "borrowed_at": time.time()}
