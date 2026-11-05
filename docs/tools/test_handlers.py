@@ -701,6 +701,46 @@ async def run(mod, pkg):
     ok &= (r[1] == "Max level")
     results.append(("成圣·满级", r[1], "99 级应拒绝"))
 
+    # ---- 天妒：同周期内只触发一次 ----
+    reset()
+    store.data["daily_usage"] = {}
+    u_td = {"money": 0, "level": 40, "last_allowance": today}
+    with patch.object(pkg.balance, "period_key", return_value="P1"):
+        hits = [p._check_tian_du(G, "td1", u_td) for _ in range(8)]
+    fired = len([h for h in hits if h])
+    ok &= (fired == 1)
+    results.append(("天妒·同周期一次", "连修 8 次触发 %d 次" % fired, "阈值 6，只应触发 1 次"))
+
+    # ---- 天妒：跨周期归零（昨天 4 次 + 今天 2 次不应触发）----
+    reset()
+    store.data["daily_usage"] = {}
+    u_td2 = {"money": 0, "level": 40, "last_allowance": today}
+    with patch.object(pkg.balance, "period_key", return_value="P1"):
+        for _ in range(4):
+            p._check_tian_du(G, "td2", u_td2)
+    with patch.object(pkg.balance, "period_key", return_value="P2"):
+        hits2 = [p._check_tian_du(G, "td2", u_td2) for _ in range(2)]
+    ok &= all(h is None for h in hits2)
+    results.append(("天妒·跨周期", "今天 2 次触发 %d 次" % len([h for h in hits2 if h]), "不应触发"))
+
+    # ---- 天妒：新周期仍可再次触发 ----
+    with patch.object(pkg.balance, "period_key", return_value="P2"):
+        hits3 = [p._check_tian_du(G, "td2", u_td2) for _ in range(4)]
+    ok &= any(hit3 is not None for hit3 in hits3)
+    results.append(("天妒·新周期", "继续 4 次后触发=%s" % bool(any(hits3)), "累计 6 次应再次触发"))
+
+    # ---- 天罚：跨周期不会把旧次数算进来 ----
+    reset()
+    store.data["daily_usage"] = {}
+    u_tf = {"money": 1000, "level": 0, "last_allowance": today}
+    with patch.object(pkg.balance, "period_key", return_value="P1"):
+        for _ in range(7):
+            p._check_tian_fa(G, "tf1", u_tf)
+    with patch.object(pkg.balance, "period_key", return_value="P2"):
+        hit_tf = p._check_tian_fa(G, "tf1", u_tf)
+    ok &= (hit_tf is None and u_tf["money"] == 1000)
+    results.append(("天罚·跨周期", "新周期首犯不触发（余额 %s）" % u_tf["money"], "旧计数不应累计"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

@@ -664,19 +664,34 @@ class PartnerGamePlugin(MaiBotPlugin):
         return bonus
 
     # ---------------- 天妒 / 天罚计数器 ----------------
-    def _bump_counter(self, group_id: str, qq: str, key: str) -> int:
-        """给本周期计数器 +1 并返回新值（存于 daily_usage，跨周期自动清零）。"""
+    def _cycle_slot(self, group_id: str, qq: str) -> dict:
+        """取「本周期」的计数容器，跨周期自动清空。
+
+        天妒/天罚这类"每周期一次"的计数与标记必须随周期归零。
+        之前它们直接塞在 daily_usage 里，而 daily_usage 在改成
+        "按行动各自周期"之后就不再整体清空了 —— 于是计数会永久累加，
+        出现"今天只修炼两次就遭天妒"（其实是叠上了前几天）。
+        现在单独放进 "__cycle" 槽，并用周期键判断是否需要重置。
+        """
         usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
-        usage[key] = usage.get(key, 0) + 1
-        return usage[key]
+        period = B.period_key(self.config.partner_game.tz_offset_hours)
+        slot = usage.get("__cycle")
+        if not isinstance(slot, dict) or slot.get("_period") != period:
+            slot = {"_period": period}
+            usage["__cycle"] = slot
+        return slot
+
+    def _bump_counter(self, group_id: str, qq: str, key: str) -> int:
+        """给本周期计数器 +1 并返回新值。"""
+        slot = self._cycle_slot(group_id, qq)
+        slot[key] = int(slot.get(key, 0)) + 1
+        return slot[key]
 
     def _flag(self, group_id: str, qq: str, key: str) -> bool:
-        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
-        return bool(usage.get(key))
+        return bool(self._cycle_slot(group_id, qq).get(key))
 
     def _set_flag(self, group_id: str, qq: str, key: str) -> None:
-        usage = self._store.data.setdefault("daily_usage", {}).setdefault(group_id, {}).setdefault(qq, {})
-        usage[key] = True
+        self._cycle_slot(group_id, qq)[key] = True
 
     def _check_tian_du(self, group_id: str, qq: str, user: dict):
         """修炼成功后调用：本周期突破达到阈值则「天妒」，修为倒退若干大境界。
