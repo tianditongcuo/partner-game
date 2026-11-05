@@ -743,15 +743,17 @@ class PartnerGamePlugin(MaiBotPlugin):
             return f"修为尽数归零（【{realm_name(before)}】→【{realm_name(0)}】）"
         return f"修为保留（【{realm_name(before)}】→【{realm_name(after)}】）"
 
-    def _rebirth(self, group_id: str, qq: str, why: str = ""):
-        """重生：按 REBIRTH_KEEP_RATIO 保留修为（默认 0 = 完全重置），其余全部重置。
+    def _rebirth(self, group_id: str, qq: str, why: str = "", keep_ratio=None):
+        """重入轮回：保留部分修为，其余全部重置。
 
-        用于：主动 /重生、秘境陨落、打怪陨落。
+        keep_ratio 为 None 时用 REBIRTH_KEEP_RATIO（主动 /重生，默认归零）；
+        陨落传入 DEATH_KEEP_RATIO（默认保留 70%）。
         返回 (原等级, 重生后等级)，供文案使用。
         """
         user = self._get_user_data(group_id, qq)
         before_level = user["level"]
-        kept_level = int(before_level * B.REBIRTH_KEEP_RATIO)
+        ratio = B.REBIRTH_KEEP_RATIO if keep_ratio is None else keep_ratio
+        kept_level = int(before_level * ratio)
 
         user["level"] = kept_level
         user["money"] = B.REBIRTH_MONEY
@@ -1800,7 +1802,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             "20. /还贷 —— 一次性结清，不支持分期\n"
             f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
             f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
-            f"23. /重生 —— 回到最初状态（修为按设定保留，默认归零），其余全部重置（陨落时自动触发）\n"
+            f"23. /重生 —— 回到最初状态（修为按设定保留，默认归零），其余全部重置\n"
+            f"     陨落时自动触发，但陨落保留 {round(B.DEATH_KEEP_RATIO*100)}% 修为（与 /重生 分开配置）\n"
             f"24. /成圣 —— 散尽全部金币，按身家硬升修为（无视大小境界），最高可至【{realm_name(B.SAINT_MAX_LEVEL)}】，但有 {round(B.SAINT_PUNISH_PROB*100)}% 几率遭天谴跌落\n"
             "\n"
             "【💕 夫妻】\n"
@@ -2362,6 +2365,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"• 成圣：/成圣 散尽全部金币，按「{B.SAINT_COST_BASE} + 当前等级×{B.SAINT_COST_PER_LEVEL}」逐层计价，升到钱财买得起的最高层（无视大小境界，最高止于 {B.SAINT_MAX_LEVEL} 层），"
             f"但有 {B.SAINT_PUNISH_PROB:.0%} 概率遭天谴、跌落 {B.SAINT_PUNISH_DROP} 层；每 {B.SAINT_CYCLE_HOURS} 小时限 {B.SAINT_LIMIT} 次。\n"
             f"• 双修：与伴侣互相申请并同意后，双方各精进 {B.DUAL_GAIN_LEVELS} 层修为，每周期限 {B.DUAL_LIMIT} 次。\n"
+            f"• 陨落与重生：秘境/打怪命中陨落会保留 {round(B.DEATH_KEEP_RATIO*100)}% 修为后重入轮回；"
+            f"主动 /重生 则按「重生保留修为比例」处理（默认归零）。两者都会重置金币与一切附属状态。\n"
             f"• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率被反杀掉落 1 级。\n"
             "---\n"
             "💰【经济财富系统】\n"
@@ -2604,7 +2609,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             msg = (f"秘境中遭遇凶兽，你仓皇逃遁、道基受创，修为倒退！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
-            before, after = self._rebirth(group_id, sender_qq, "秘境陨落")
+            before, after = self._rebirth(group_id, sender_qq, "秘境陨落",
+                                          keep_ratio=B.DEATH_KEEP_RATIO)
             msg = (f"秘境中天雷降下，你未能抵御、就此陨落……\n"
                    f"你重入轮回：{self._rebirth_desc(before, after)}，其余一切重置。")
 
@@ -2930,7 +2936,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             msg = (f"你被怪物重创，狼狈逃回，修为跌落！"
                    f"【{realm_name(before)}】→【{realm_name(user['level'])}】")
         else:
-            before, after = self._rebirth(group_id, sender_qq, "打怪陨落")
+            before, after = self._rebirth(group_id, sender_qq, "打怪陨落",
+                                          keep_ratio=B.DEATH_KEEP_RATIO)
             msg = (f"你遇上了一头远古凶兽，力竭身陨……\n"
                    f"你重入轮回：{self._rebirth_desc(before, after)}，其余一切重置。")
 

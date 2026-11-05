@@ -362,7 +362,7 @@ async def run(mod, pkg):
         (0.05, "打怪·金币", "金币增加"),
         (0.65, "打怪·提升", "+4 级"),
         (0.88, "打怪·跌落", "-4 级"),
-        (0.99, "打怪·陨落", "重生归零"),
+        (0.99, "打怪·陨落", "陨落保留七成"),
     ):
         reset()
         ctx("u1")
@@ -373,8 +373,9 @@ async def run(mod, pkg):
         u = users["u1"]
         results.append((label, "Lv=%s 金币=%s" % (u["level"], u["money"]), expect_desc))
         ok &= (r[1] == "Beast done")
-    # 陨落后完全重置：修为归零、金币为重生启动资金
-    ok &= (users["u1"]["level"] == 0 and users["u1"]["money"] == B.REBIRTH_MONEY)
+    # 陨落与主动重生不同：保留 DEATH_KEEP_RATIO 的修为，金币为重生启动资金
+    ok &= (users["u1"]["level"] == int(40 * B.DEATH_KEEP_RATIO)
+           and users["u1"]["money"] == B.REBIRTH_MONEY)
 
     # ---- 主动重生：完全重置，回到最初状态 ----
     reset()

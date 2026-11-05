@@ -574,6 +574,13 @@ class BalanceHeavenSection(_BalanceBase):
         default=B.REBIRTH_MONEY, ge=0, le=100000000,
         description="重生后发放的金币数额，即「最初状态」的启动资金。默认 1000。",
         json_schema_extra={"label": "重生后金币", "placeholder": "默认 1000", "order": 110, "step": 100})
+    death_keep_ratio: float = Field(
+        default=B.DEATH_KEEP_RATIO, ge=0, le=1,
+        description=(
+            "陨落（秘境/打怪）后保留的修为比例，与主动 /重生 分开。默认 0.7 = 保留 70% 等级。\n"
+            "其余一切（金币、伴侣、贷款、氪金加成、本周期次数与冷却）同样全部重置。"
+        ),
+        json_schema_extra={"label": "陨落保留修为比例", "placeholder": "默认 0.7", "order": 111, "step": 0.05})
     fine_compensation_ratio: float = Field(
         default=B.FINE_COMPENSATION_RATIO, ge=0, le=1,
         description=("**失败罚款**里赔给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。\n"
