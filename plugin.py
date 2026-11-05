@@ -68,6 +68,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         self._last_action: dict = {}
         self.pending_proposals: dict = {}
         self.pending_mating: dict = {}      # (群号, 被申请人QQ) → 交配申请
+        self.pending_dual: dict = {}        # (群号, 被申请人QQ) → 双修申请
         self._member_cache: dict = {}       # 群号 → (时间戳, {QQ: 昵称})
         self._bot_qq_cache: Optional[str] = None
         try:
@@ -779,6 +780,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         for key, req in list(self.pending_mating.items()):
             if str(key[1]) == qq or str(req.get("proposer")) == qq:
                 self.pending_mating.pop(key, None)
+        for key, req in list(self.pending_dual.items()):
+            if str(key[1]) == qq or str(req.get("proposer")) == qq:
+                self.pending_dual.pop(key, None)
 
         self.ctx.logger.info("重生: %s（%s）%s → %s" % (qq, why, before_level, kept_level))
         return before_level, kept_level
@@ -1802,16 +1806,17 @@ class PartnerGamePlugin(MaiBotPlugin):
             "【💕 夫妻】\n"
             f"25. /申请交配 —— 好感满 {B.MATING_AFFECTION_MIN} 后可申请，对方回复「同意」或「拒绝」\n"
             f"     每次成功 +{B.MATING_AFFECTION_GAIN} 好感（每周期 {B.MATING_LIMIT} 次）\n"
+            f"26. /双修 @伴侣 —— 与伴侣双修，双方各精进修为，每周期 {B.DUAL_LIMIT} 次\n"
             "\n"
             "【🏆 榜单与查询】\n"
-            "26. /战力榜   27. /财富榜   28. /好感榜\n"
-            "29. /游戏机制 —— 查看当前全部数值与公式\n"
-            "30. /抽老婆帮助 —— 本页\n"
+            "27. /战力榜   28. /财富榜   29. /好感榜\n"
+            "30. /游戏机制 —— 查看当前全部数值与公式\n"
+            "31. /抽老婆帮助 —— 本页\n"
             "\n"
             "【🛠 管理员】\n"
-            "31. /重置 @某人 —— 只保留修为与金币，其余全部重置\n"
-            "32. /全服补偿 <金额> —— 给本群所有玩家发钱\n"
-            "33. /发钱 @某人 <金额> —— 定向加减金币（支持负数）\n"
+            "32. /重置 @某人 —— 只保留修为与金币，其余全部重置\n"
+            "33. /全服补偿 <金额> —— 给本群所有玩家发钱\n"
+            "34. /发钱 @某人 <金额> —— 定向加减金币（支持负数）\n"
             "=========================\n"
             f"🎯 基础成功率：强娶 {prob_force}% ｜ 抢夺 {prob_rob}%\n"
             f"⚔️ 底蕴战力 = 等级 × (大境界序号+1)；每 1 点战力差 = {rate_percent()} 胜率\n"
@@ -2240,6 +2245,8 @@ class PartnerGamePlugin(MaiBotPlugin):
                 self.pending_proposals.pop(pid, None)
         for key in [k for k in self.pending_mating if str(k[1]) == target_qq]:
             self.pending_mating.pop(key, None)
+        for key in [k for k in self.pending_dual if str(k[1]) == target_qq]:
+            self.pending_dual.pop(key, None)
         for key in [k for k in self._last_action if k.split("_")[1:2] == [target_qq]]:
             self._last_action.pop(key, None)
 
@@ -2354,6 +2361,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"本次突破直接失败并跌落 {B.TRIBULATION_DROP_LEVELS} 层。\n"
             f"• 成圣：/成圣 散尽全部金币，按「{B.SAINT_COST_BASE} + 当前等级×{B.SAINT_COST_PER_LEVEL}」逐层计价，升到钱财买得起的最高层（无视大小境界，最高止于 {B.SAINT_MAX_LEVEL} 层），"
             f"但有 {B.SAINT_PUNISH_PROB:.0%} 概率遭天谴、跌落 {B.SAINT_PUNISH_DROP} 层；每 {B.SAINT_CYCLE_HOURS} 小时限 {B.SAINT_LIMIT} 次。\n"
+            f"• 双修：与伴侣互相申请并同意后，双方各精进 {B.DUAL_GAIN_LEVELS} 层修为，每周期限 {B.DUAL_LIMIT} 次。\n"
             f"• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率被反杀掉落 1 级。\n"
             "---\n"
             "💰【经济财富系统】\n"
@@ -2607,6 +2615,106 @@ class PartnerGamePlugin(MaiBotPlugin):
 
 
 
+    # ---------------- 双修 ----------------
+    async def _resolve_dual(self, group_id: str, sender_qq: str, req: dict, kwargs):
+        """处理双修应答：同意则双方各精进，拒绝则作废。"""
+        key = (group_id, sender_qq)
+
+        if time.time() - req["timestamp"] > B.DUAL_TIMEOUT_SECONDS:
+            self.pending_dual.pop(key, None)
+            await self._send_avatar_msg(group_id, "双修申请已经超时作废了。", sender_qq, "")
+            return True, "Timeout", 2
+
+        text = self._message_text(kwargs)
+        if "拒绝" in text:
+            self.pending_dual.pop(key, None)
+            await self._send_avatar_msg(group_id, "对方拒绝了你的双修申请……", req["proposer"], sender_qq)
+            return True, "Rejected", 2
+
+        # 同意：先确认关系还在（可能刚被抢/离婚）
+        marriage = self._get_user_marriage(group_id, req["proposer"])
+        if not marriage or str(marriage.get("partner_uid")) != str(sender_qq):
+            self.pending_dual.pop(key, None)
+            await self._send_avatar_msg(group_id, "你们已经不是伴侣了，双修申请作废。", sender_qq, "")
+            return True, "No longer partners", 2
+
+        self.pending_dual.pop(key, None)
+
+        a = self._get_user_data(group_id, req["proposer"])
+        b = self._get_user_data(group_id, sender_qq)
+        gain = max(0, int(B.DUAL_GAIN_LEVELS))
+        a_before, b_before = a["level"], b["level"]
+        a["level"] = min(MAX_LEVEL, a_before + gain)
+        b["level"] = min(MAX_LEVEL, b_before + gain)
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        await self._send_avatar_msg(
+            group_id,
+            f"两人相对而坐、气息交融，双修圆满~\n"
+            f"双方修为俱有精进："
+            f"【{realm_name(a_before)}】→【{realm_name(a['level'])}】、"
+            f"【{realm_name(b_before)}】→【{realm_name(b['level'])}】。",
+            sender_qq, req["proposer"])
+        return True, "Dual accepted", 2
+
+    @Command("dual", pattern=r"^\s*(?:/双修|双修)(?:\s+|\[CQ:at|@|\d|$).*")
+    async def handle_dual(self, stream_id: str = "", **kwargs):
+        """向伴侣发起双修申请，对方回复「同意」后双方各精进一级。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "dual")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
+        marriage = self._get_user_marriage(group_id, sender_qq)
+        if not marriage:
+            await self._send_avatar_msg(group_id, "你还没有伴侣，双修个寂寞啊……", sender_qq, "")
+            return True, "Single", 2
+
+        target_qq = self._extract_at_qq(kwargs)
+        partner_qq = str(marriage["partner_uid"])
+        if not target_qq:
+            await self._send_avatar_msg(
+                group_id, f"想和谁双修？请 @ 你的伴侣，例如【/双修 @{partner_qq}】。", sender_qq, "")
+            return True, "No target", 2
+        if str(target_qq) != partner_qq:
+            await self._send_avatar_msg(group_id, "双修只能和你的伴侣进行。", sender_qq, "")
+            return True, "Not partner", 2
+
+        is_cd, rem = self._check_cooldown(group_id, sender_qq, "dual", B.COOLDOWN_DUAL)
+        if is_cd:
+            await self._send_avatar_msg(group_id, f"技能冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            return True, "cooldown", 2
+
+        if not self._check_daily_limit(group_id, sender_qq, "dual", B.DUAL_LIMIT):
+            await self._send_avatar_msg(group_id, "本周期你们双修的次数已用完，再练要伤根基了。", sender_qq, "")
+            return True, "limit", 2
+
+        self.pending_dual[(group_id, partner_qq)] = {
+            "proposer": sender_qq,
+            "partner": partner_qq,
+            "group_id": group_id,
+            "timestamp": time.time(),
+        }
+
+        nick = await self._get_member_nick(group_id, partner_qq)
+        await self._send_avatar_msg(
+            group_id,
+            f"【{sender_qq}】向伴侣【{nick}({partner_qq})】发起了双修申请……\n"
+            f"请对方在 {B.DUAL_TIMEOUT_SECONDS} 秒内回复「同意」或「拒绝」。",
+            sender_qq, partner_qq)
+        return True, "Dual requested", 2
+
     # ---------------- 交配 ----------------
     @Command("mating_request", pattern=r"^\s*(?:/申请交配|申请交配)$")
     async def handle_mating_request(self, stream_id: str = "", **kwargs):
@@ -2670,6 +2778,12 @@ class PartnerGamePlugin(MaiBotPlugin):
             return False, "Not in group", 0
 
         key = (group_id, sender_qq)
+
+        # 双修申请优先处理（同一句「同意」可能对应两种申请）
+        dual_req = self.pending_dual.get(key)
+        if dual_req:
+            return await self._resolve_dual(group_id, sender_qq, dual_req, kwargs)
+
         req = self.pending_mating.get(key)
         if not req:
             return False, "No pending mating", 0      # 普通聊天里的「同意」不拦截

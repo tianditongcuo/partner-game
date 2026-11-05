@@ -53,6 +53,7 @@ def make_plugin(mod, store, rec):
     p._last_action = {}
     p.pending_proposals = {}
     p.pending_mating = {}      # on_load 里初始化，测试里手动补
+    p.pending_dual = {}
     p.config = SimpleNamespace(
         plugin=SimpleNamespace(enabled=True),
         partner_game=SimpleNamespace(tz_offset_hours=8, persist_enabled=False,
@@ -775,6 +776,56 @@ async def run(mod, pkg):
     r = await p.handle_loan(stream_id="", message={"processed_plain_text": "/贷款 %d" % (50 * B.LOAN_CAP_PER_LEVEL)})
     ok &= (r[1] == "Loan granted" and users["u3"]["money"] == 50 * B.LOAN_CAP_PER_LEVEL)
     results.append(("贷款·高境界", "50级借 %s" % users["u3"]["money"], "额度随等级提升"))
+
+    # ---- 双修：非伴侣不可用 ----
+    reset()
+    store.data["marriages"] = {}
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u9"
+    users["u1"] = {"money": 1000, "level": 10, "last_allowance": today}
+    r = await p.handle_dual(stream_id="", message={"processed_plain_text": "/双修 @u9"})
+    ok &= (r[1] == "Single")
+    results.append(("双修·无伴侣", r[1], "单身应被拒"))
+
+    # ---- 双修：申请 → 同意 → 双方各精进 ----
+    reset()
+    store.data["marriages"] = {G: {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                          "wife_card": "", "affection": 0}}}
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    users["u1"] = {"money": 1000, "level": 10, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 20, "last_allowance": today}
+    r = await p.handle_dual(stream_id="", message={"processed_plain_text": "/双修 @u2"})
+    req_ok = (r[1] == "Dual requested" and (G, "u2") in p.pending_dual)
+    ctx("u2")
+    with patch.object(random, "random", return_value=0.9):
+        r2 = await p.handle_mating_reply(stream_id="", message={"processed_plain_text": "同意"})
+    gained = (users["u1"]["level"] == 11 and users["u2"]["level"] == 21)
+    ok &= bool(req_ok and gained and r2[1] == "Dual accepted")
+    results.append(("双修·同意", "申请=%s u1→%s u2→%s" % (r[1], users["u1"]["level"], users["u2"]["level"]),
+                    "双方各 +1"))
+
+    # ---- 双修：拒绝则不变 ----
+    reset()
+    store.data["marriages"] = {G: {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
+                                          "wife_card": "", "affection": 0}}}
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u2"
+    users["u1"] = {"money": 1000, "level": 10, "last_allowance": today}
+    users["u2"] = {"money": 1000, "level": 20, "last_allowance": today}
+    await p.handle_dual(stream_id="", message={"processed_plain_text": "/双修 @u2"})
+    ctx("u2")
+    r3 = await p.handle_mating_reply(stream_id="", message={"processed_plain_text": "拒绝"})
+    ok &= (users["u1"]["level"] == 10 and users["u2"]["level"] == 20 and r3[1] == "Rejected")
+    results.append(("双修·拒绝", "u1=%s u2=%s" % (users["u1"]["level"], users["u2"]["level"]), "双方不变"))
+
+    # ---- 双修：申请对象必须是伴侣 ----
+    reset()
+    ctx("u1")
+    p._extract_at_qq = lambda kwargs: "u9"
+    r4 = await p.handle_dual(stream_id="", message={"processed_plain_text": "/双修 @u9"})
+    ok &= (r4[1] == "Not partner")
+    results.append(("双修·非伴侣", r4[1], "只能和伴侣双修"))
 
     # ---- 天妒：同周期内只触发一次 ----
     reset()

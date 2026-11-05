@@ -286,6 +286,22 @@ class BalanceMarriageSection(_BalanceBase):
     cooldown_my_partner: int = Field(
         default=B.COOLDOWN_MY_PARTNER, description="/我的伴侣 的冷却秒数，查询类可以设短些。默认 10。", ge=0, le=100000000,
         json_schema_extra={"label": "查询伴侣冷却（秒）", "placeholder": "默认 10", "order": 44, "step": 5})
+    cooldown_dual: int = Field(
+        default=B.COOLDOWN_DUAL, ge=0, le=86400,
+        description="/双修 的冷却秒数。默认 30。",
+        json_schema_extra={"label": "双修冷却（秒）", "placeholder": "默认 30", "order": 45, "step": 10})
+    dual_limit: Union[int, str] = Field(
+        default=B.DUAL_LIMIT,
+        description="每周期可双修几次（夫妻共用次数）。默认 3；填「不限制」= 不限次。",
+        json_schema_extra={"label": "双修次数", "placeholder": "默认 3", "order": 46, "step": 1})
+    dual_gain_levels: int = Field(
+        default=B.DUAL_GAIN_LEVELS, ge=0, le=100,
+        description="双修成功后，双方各自精进的层数。默认 1。",
+        json_schema_extra={"label": "双修精进层数", "placeholder": "默认 1", "order": 47, "step": 1})
+    dual_timeout_seconds: int = Field(
+        default=B.DUAL_TIMEOUT_SECONDS, ge=0, le=3600,
+        description="双修申请的有效期（秒），超时作废。默认 120。",
+        json_schema_extra={"label": "双修申请有效期", "placeholder": "默认 120", "order": 48, "step": 10})
     cooldown_mating: int = Field(
         default=B.COOLDOWN_MATING, description="/申请交配 的冷却秒数。默认 30。", ge=0, le=100000000,
         json_schema_extra={"label": "交配冷却（秒）", "placeholder": "默认 30", "order": 45, "step": 10})
