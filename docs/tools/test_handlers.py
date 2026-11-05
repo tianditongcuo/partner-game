@@ -654,22 +654,47 @@ async def run(mod, pkg):
     ok &= ("%" not in txt and "氪金" in txt)
     results.append(("氪金文案", txt.splitlines()[0][:22], "不应出现百分比"))
 
-    # ---- 成圣：成功升一层，按等级扣费 ----
+    # ---- 成圣：散尽金币，按身家连升 ----
+    def _reach(level, wallet):
+        """与 handler 同规则：逐层买，返回能到的等级。"""
+        reach, spent = level, 0
+        while reach < 99:
+            price = B.SAINT_COST_BASE + reach * B.SAINT_COST_PER_LEVEL
+            if spent + price > wallet:
+                break
+            spent += price
+            reach += 1
+        return reach
+
     reset()
     store.data["marriages"] = {}
     ctx("u1")
-    cost10 = B.SAINT_COST_BASE + 10 * B.SAINT_COST_PER_LEVEL
-    users["u1"] = {"money": 10 ** 7, "level": 10, "last_allowance": today}
+    wallet = 10 ** 7
+    expect = _reach(10, wallet)
+    users["u1"] = {"money": wallet, "level": 10, "last_allowance": today}
     with patch.object(random, "random", return_value=0.9):
         r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
-    ok &= (users["u1"]["level"] == 11 and users["u1"]["money"] == 10 ** 7 - cost10)
-    results.append(("成圣·成功", "Lv 10→%s 余额=%s" % (users["u1"]["level"], users["u1"]["money"]), "应升一层并扣费"))
+    ok &= (users["u1"]["level"] == expect and expect > 11 and users["u1"]["money"] == 0)
+    results.append(("成圣·连升", "Lv 10→%s 余额=%s" % (users["u1"]["level"], users["u1"]["money"]),
+                    "应花光金币并连升到 %s" % expect))
+
+    # ---- 成圣：钱只够升一层时正好升一层 ----
+    reset()
+    ctx("u1")
+    price10 = B.SAINT_COST_BASE + 10 * B.SAINT_COST_PER_LEVEL
+    users["u1"] = {"money": price10, "level": 10, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.9):
+        await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (users["u1"]["level"] == 11 and users["u1"]["money"] == 0)
+    results.append(("成圣·单层", "Lv 10→%s 余额=%s" % (users["u1"]["level"], users["u1"]["money"]), "刚好够一层"))
 
     # ---- 成圣：周期限次（第一次成功，第二次被拒）----
     reset()
     ctx("u1")
+    users["u1"] = {"money": 10 ** 7, "level": 10, "last_allowance": today}
     with patch.object(random, "random", return_value=0.9):
         await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+        users["u1"]["money"] = 10 ** 7      # 补足金币，让第二次只剩"限次"这一个阻碍
         r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
     ok &= (r[1] == "limit")
     results.append(("成圣·限次", r[1], "同周期第二次应被拒"))
@@ -681,17 +706,18 @@ async def run(mod, pkg):
     with patch.object(random, "random", return_value=0.0):
         r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
     dropped = users["u1"]["level"] == 20 - B.SAINT_PUNISH_DROP
-    ok &= bool(dropped)
-    results.append(("成圣·天谴", "Lv 20→%s" % users["u1"]["level"], "应跌落且不升级"))
+    ok &= bool(dropped and users["u1"]["money"] == 0)
+    results.append(("成圣·天谴", "Lv 20→%s 余额=%s" % (users["u1"]["level"], users["u1"]["money"]),
+                    "应跌落且金币清零"))
 
     # ---- 成圣：费用随等级上涨 ----
     reset()
     ctx("u1")
-    cost40 = B.SAINT_COST_BASE + 40 * B.SAINT_COST_PER_LEVEL
-    users["u1"] = {"money": cost40 - 1, "level": 40, "last_allowance": today}
+    price40 = B.SAINT_COST_BASE + 40 * B.SAINT_COST_PER_LEVEL
+    users["u1"] = {"money": price40 - 1, "level": 40, "last_allowance": today}
     r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
-    ok &= (r[1] == "No money" and cost40 > cost10)
-    results.append(("成圣·费用", "40级需 %s（10级 %s）" % (cost40, cost10), "等级越高越贵且钱不够被拒"))
+    ok &= (r[1] == "Not enough" and users["u1"]["level"] == 40 and users["u1"]["money"] == price40 - 1)
+    results.append(("成圣·钱不够", "40级需 %s" % price40, "不够一层应被拒且不扣钱"))
 
     # ---- 成圣：满级不可用 ----
     reset()

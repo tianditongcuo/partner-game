@@ -1790,7 +1790,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
             f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
             f"23. /重生 —— 保留 {round(B.REBIRTH_KEEP_RATIO*100)}% 修为，其余全部重置（陨落时自动触发）\n"
-            f"24. /成圣 —— 散尽家财硬升一层，无视大小境界，但有 {round(B.SAINT_PUNISH_PROB*100)}% 几率遭天谴跌落\n"
+            f"24. /成圣 —— 散尽全部金币，按身家硬升修为（无视大小境界），但有 {round(B.SAINT_PUNISH_PROB*100)}% 几率遭天谴跌落\n"
             "\n"
             "【💕 夫妻】\n"
             f"25. /申请交配 —— 好感满 {B.MATING_AFFECTION_MIN} 后可申请，对方回复「同意」或「拒绝」\n"
@@ -2345,7 +2345,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"失败后有 {B.MAJOR_FAIL_DROP_RATE:.0%} 概率走火入魔掉落 1 级。\n"
             f"• 雷劫：元婴期每次大境界突破都会引来雷劫（触发概率 {B.TRIBULATION_PROB:.0%}），"
             f"本次突破直接失败并跌落 {B.TRIBULATION_DROP_LEVELS} 层。\n"
-            f"• 成圣：/成圣 消耗 {B.SAINT_COST_BASE} + 等级×{B.SAINT_COST_PER_LEVEL} 金币，直接升一层（无视大小境界），"
+            f"• 成圣：/成圣 散尽全部金币，按「{B.SAINT_COST_BASE} + 当前等级×{B.SAINT_COST_PER_LEVEL}」逐层计价，升到钱财买得起的最高层（无视大小境界），"
             f"但有 {B.SAINT_PUNISH_PROB:.0%} 概率遭天谴、跌落 {B.SAINT_PUNISH_DROP} 层；每 {B.SAINT_CYCLE_HOURS} 小时限 {B.SAINT_LIMIT} 次。\n"
             f"• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率被反杀掉落 1 级。\n"
             "---\n"
@@ -2993,7 +2993,7 @@ class PartnerGamePlugin(MaiBotPlugin):
     # ---------------- 成圣 ----------------
     @Command("saint", pattern=r"^\s*(?:/成圣|成圣|/贷款成圣|贷款成圣)$")
     async def handle_saint(self, stream_id: str = "", **kwargs):
-        """散尽家财硬升一级：无视大小境界，但有几率遭天谴跌落。"""
+        """散尽全部金币，按身家硬升到买得起的最高层；无视大小境界，但可能遭天谴。"""
         if not self.config.plugin.enabled:
             return False, "Disabled", 0
         if self._has_quote(kwargs):
@@ -3015,36 +3015,57 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, f"你已至【{realm_name(MAX_LEVEL)}】，成圣之路再无前方。", sender_qq, "")
             return True, "Max level", 2
 
-        cost = int(B.SAINT_COST_BASE + level * B.SAINT_COST_PER_LEVEL)
-        if user["money"] < cost:
+        if user["money"] <= 0:
+            await self._send_avatar_msg(group_id, "散尽家财也得先有家财——你现在身无分文。", sender_qq, "")
+            return True, "No money", 2
+
+        # 逐层计价：价格 = 基础 + 当前等级 × 加价，等级越高越贵。
+        # 金币会被全部花光，所以这里先算出「这笔钱最多能推升到哪一层」。
+        def layer_cost(lv: int) -> int:
+            return int(B.SAINT_COST_BASE + lv * B.SAINT_COST_PER_LEVEL)
+
+        wallet = user["money"]
+        reach = level
+        spent = 0
+        while reach < MAX_LEVEL:
+            price = layer_cost(reach)
+            if spent + price > wallet:
+                break
+            spent += price
+            reach += 1
+
+        gained = reach - level
+        if gained <= 0:
+            need = layer_cost(level) - wallet
             await self._send_avatar_msg(
                 group_id,
-                f"成圣需以重金叩问天道：你当前需 {cost} 金币，兜里只有 {user['money']}。",
+                f"你的家财还不够撬动一层修为：当前需 {layer_cost(level)} 金币，还差 {need}。",
                 sender_qq, "")
-            return True, "No money", 2
+            return True, "Not enough", 2
 
         if not self._check_daily_limit(group_id, sender_qq, "saint", B.SAINT_LIMIT,
                                        cycle_hours=B.SAINT_CYCLE_HOURS):
             await self._send_avatar_msg(group_id, "本周期成圣的次数已用完，天道也要歇一歇。", sender_qq, "")
             return True, "limit", 2
 
-        user["money"] -= cost
+        # 全部金币蒸发，一分不留
+        user["money"] = 0
         before = level
 
         if random.random() < B.SAINT_PUNISH_PROB:
             drop = min(before, max(0, int(B.SAINT_PUNISH_DROP)))
             user["level"] = before - drop
-            msg = (f"⚡ 你以重金强叩天门，天道震怒——\n"
+            msg = (f"⚡ 你倾尽 {wallet} 金币硬叩天门，天道震怒——\n"
                    f"雷光散去，修为跌落（【{realm_name(before)}】→【{realm_name(user['level'])}】），重金亦散尽。")
         else:
-            user["level"] = min(MAX_LEVEL, before + 1)
-            msg = (f"💰 你散尽家财叩问天道，竟得一丝垂青——\n"
-                   f"修为更进一层（【{realm_name(before)}】→【{realm_name(user['level'])}】）。")
+            user["level"] = min(MAX_LEVEL, reach)
+            msg = (f"💰 你倾尽 {wallet} 金币叩问天道，竟得一丝垂青——\n"
+                   f"修为拔升（【{realm_name(before)}】→【{realm_name(user['level'])}】）。")
 
         if self.config.partner_game.persist_enabled:
             await self._store.save()
 
-        await self._send_avatar_msg(group_id, f"消耗 {cost} 金币。\n{msg}", sender_qq, "")
+        await self._send_avatar_msg(group_id, f"散尽 {wallet} 金币。\n{msg}", sender_qq, "")
         return True, "Saint done", 2
 
 

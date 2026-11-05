@@ -750,14 +750,14 @@ class BalanceSaintSection(PluginConfigBase):
     saint_cost_base: int = Field(
         default=B.SAINT_COST_BASE, ge=0, le=100000000,
         description=(
-            "成圣的基础费用。实际费用 = 本值 + 当前等级 × 每级加价。\n"
-            "等级越高越贵，默认 5000 起步。"
+            "成圣时「每提升一层」的价格基数。\n"
+            "某一层的价格 = 本值 + 该层等级 × 每级加价，等级越高越贵。"
         ),
-        json_schema_extra={"label": "成圣基础费用", "placeholder": "默认 5000", "order": 170, "step": 500})
+        json_schema_extra={"label": "每层价格基数", "placeholder": "默认 5000", "order": 170, "step": 500})
     saint_cost_per_level: int = Field(
         default=B.SAINT_COST_PER_LEVEL, ge=0, le=100000000,
-        description="每高一级，成圣费用增加的金额。默认 2000。",
-        json_schema_extra={"label": "每级费用加价", "placeholder": "默认 2000", "order": 171, "step": 100})
+        description="每高一级，该层售价额外增加的金额。默认 2000。",
+        json_schema_extra={"label": "每级价格加价", "placeholder": "默认 2000", "order": 171, "step": 100})
     saint_punish_prob: float = Field(
         default=B.SAINT_PUNISH_PROB, ge=0, le=1,
         description=(

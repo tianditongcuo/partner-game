@@ -34,4 +34,4 @@ beast,handle_beast,入口与路由,2737,66,5,,daily_usage|users,persist_enabled,
 rebirth,handle_rebirth,入口与路由,2804,27,2,,,persist_enabled,,,,
 bully,handle_bully,战斗结算,2832,68,9,,daily_usage|users,persist_enabled,,bully,Y,
 suppress,handle_suppress,战斗结算,2901,92,9,,daily_usage|marriages|users,persist_enabled,,suppress,Y,Y
-saint,handle_saint,修仙成长,2994,54,6,,daily_usage|users,persist_enabled,,,,Y
+saint,handle_saint,修仙成长,2994,75,7,,daily_usage|users,persist_enabled,,,Y,Y

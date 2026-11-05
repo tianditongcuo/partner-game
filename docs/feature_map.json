@@ -4,12 +4,12 @@
     "id": "tianditongcuo.partner-game-pro",
     "version": "2.0.2",
     "files": {
-      "plugin.py": 3052,
+      "plugin.py": 3073,
       "config.py": 803,
       "utils.py": 137,
       "__init__.py": 2
     },
-    "plugin_py_loc": 3052,
+    "plugin_py_loc": 3073,
     "commands": 36,
     "config_fields": 136,
     "domains": {
@@ -1222,9 +1222,9 @@
       "lineno": 2994,
       "decorator_lineno": 2994,
       "code_lineno": 2995,
-      "end_lineno": 3048,
-      "loc": 54,
-      "awaits": 6,
+      "end_lineno": 3069,
+      "loc": 75,
+      "awaits": 7,
       "api_calls": [],
       "config_keys": [
         "persist_enabled"
@@ -1241,7 +1241,7 @@
       "daily_limits": [],
       "cooldowns": [],
       "penalties": [],
-      "mutates_money": false,
+      "mutates_money": true,
       "mutates_level": true,
       "domain": "cultivation"
     }
@@ -2161,14 +2161,14 @@
       "section": "BalanceSaintSection",
       "name": "saint_cost_base",
       "default": null,
-      "label": "成圣基础费用",
+      "label": "每层价格基数",
       "annotation": ""
     },
     {
       "section": "BalanceSaintSection",
       "name": "saint_cost_per_level",
       "default": null,
-      "label": "每级费用加价",
+      "label": "每级价格加价",
       "annotation": ""
     },
     {
