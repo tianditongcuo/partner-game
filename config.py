@@ -741,6 +741,44 @@ class BalancePerfSection(PluginConfigBase):
         json_schema_extra={"label": "头像缓存（秒）", "placeholder": "默认 300", "order": 161, "step": 30})
 
 
+class BalanceSaintSection(PluginConfigBase):
+    """⑯ 成圣 —— 砸钱硬升一级，但可能遭天谴。"""
+
+    __ui_label__: ClassVar[str] = "⑯ 贷款成圣"
+    __ui_order__: ClassVar[int] = 17
+
+    saint_cost_base: int = Field(
+        default=B.SAINT_COST_BASE, ge=0, le=100000000,
+        description=(
+            "成圣的基础费用。实际费用 = 本值 + 当前等级 × 每级加价。\n"
+            "等级越高越贵，默认 5000 起步。"
+        ),
+        json_schema_extra={"label": "成圣基础费用", "placeholder": "默认 5000", "order": 170, "step": 500})
+    saint_cost_per_level: int = Field(
+        default=B.SAINT_COST_PER_LEVEL, ge=0, le=100000000,
+        description="每高一级，成圣费用增加的金额。默认 2000。",
+        json_schema_extra={"label": "每级费用加价", "placeholder": "默认 2000", "order": 171, "step": 100})
+    saint_punish_prob: float = Field(
+        default=B.SAINT_PUNISH_PROB, ge=0, le=1,
+        description=(
+            "成圣时遭天谴的概率。0~1，默认 0.20。\n"
+            "天谴时本次不升反降，并按下面的层数跌落；没遭天谴则稳定升一级。"
+        ),
+        json_schema_extra={"label": "天谴概率", "placeholder": "默认 0.20", "order": 172, "step": 0.05})
+    saint_punish_drop: int = Field(
+        default=B.SAINT_PUNISH_DROP, ge=0, le=100,
+        description="遭天谴时跌落的层数。默认 4。",
+        json_schema_extra={"label": "天谴跌落层数", "placeholder": "默认 4", "order": 173, "step": 1})
+    saint_limit: Union[int, str] = Field(
+        default=B.SAINT_LIMIT,
+        description="每周期可成圣几次。默认 1；填「不限制」= 不限次；0 = 禁用。",
+        json_schema_extra={"label": "每周期成圣次数", "placeholder": "默认 1", "order": 174, "step": 1})
+    saint_cycle_hours: int = Field(
+        default=B.SAINT_CYCLE_HOURS, ge=1, le=8760,
+        description="/成圣 自己的周期时长（小时），到点后次数清零。默认 24。",
+        json_schema_extra={"label": "成圣周期（小时）", "placeholder": "默认 24", "order": 175, "step": 1})
+
+
 class PartnerGameConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     partner_game: PartnerGameSection = Field(default_factory=PartnerGameSection)
@@ -760,5 +798,6 @@ class PartnerGameConfig(PluginConfigBase):
     balance_bully: BalanceBullySection = Field(default_factory=BalanceBullySection)
     balance_suppress: BalanceSuppressSection = Field(default_factory=BalanceSuppressSection)
     balance_perf: BalancePerfSection = Field(default_factory=BalancePerfSection)
+    balance_saint: BalanceSaintSection = Field(default_factory=BalanceSaintSection)
 
 

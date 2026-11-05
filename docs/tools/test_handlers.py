@@ -654,6 +654,53 @@ async def run(mod, pkg):
     ok &= ("%" not in txt and "氪金" in txt)
     results.append(("氪金文案", txt.splitlines()[0][:22], "不应出现百分比"))
 
+    # ---- 成圣：成功升一层，按等级扣费 ----
+    reset()
+    store.data["marriages"] = {}
+    ctx("u1")
+    cost10 = B.SAINT_COST_BASE + 10 * B.SAINT_COST_PER_LEVEL
+    users["u1"] = {"money": 10 ** 7, "level": 10, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.9):
+        r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (users["u1"]["level"] == 11 and users["u1"]["money"] == 10 ** 7 - cost10)
+    results.append(("成圣·成功", "Lv 10→%s 余额=%s" % (users["u1"]["level"], users["u1"]["money"]), "应升一层并扣费"))
+
+    # ---- 成圣：周期限次（第一次成功，第二次被拒）----
+    reset()
+    ctx("u1")
+    with patch.object(random, "random", return_value=0.9):
+        await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+        r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (r[1] == "limit")
+    results.append(("成圣·限次", r[1], "同周期第二次应被拒"))
+
+    # ---- 成圣：天谴跌落 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 10 ** 7, "level": 20, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.0):
+        r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    dropped = users["u1"]["level"] == 20 - B.SAINT_PUNISH_DROP
+    ok &= bool(dropped)
+    results.append(("成圣·天谴", "Lv 20→%s" % users["u1"]["level"], "应跌落且不升级"))
+
+    # ---- 成圣：费用随等级上涨 ----
+    reset()
+    ctx("u1")
+    cost40 = B.SAINT_COST_BASE + 40 * B.SAINT_COST_PER_LEVEL
+    users["u1"] = {"money": cost40 - 1, "level": 40, "last_allowance": today}
+    r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (r[1] == "No money" and cost40 > cost10)
+    results.append(("成圣·费用", "40级需 %s（10级 %s）" % (cost40, cost10), "等级越高越贵且钱不够被拒"))
+
+    # ---- 成圣：满级不可用 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 10 ** 9, "level": 99, "last_allowance": today}
+    r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (r[1] == "Max level")
+    results.append(("成圣·满级", r[1], "99 级应拒绝"))
+
     print("%-16s %-18s %s" % ("场景", "返回", "详情"))
     print("-" * 78)
     for a, b, c in results:

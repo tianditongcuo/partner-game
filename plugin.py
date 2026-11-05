@@ -33,7 +33,7 @@ _BALANCE_SECTIONS = (
     "balance_cycle", "balance_economy", "balance_cultivation", "balance_marriage",
     "balance_force", "balance_rob_wife", "balance_rob_money", "balance_social",
     "balance_explore", "balance_loan", "balance_heaven", "balance_beast",
-    "balance_bully", "balance_suppress",
+    "balance_bully", "balance_suppress", "balance_perf", "balance_saint",
 )
 
 _BALANCE_DEFAULTS = {
@@ -1775,20 +1775,21 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
             f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
             f"23. /重生 —— 保留 {round(B.REBIRTH_KEEP_RATIO*100)}% 修为，其余全部重置（陨落时自动触发）\n"
+            f"24. /成圣 —— 散尽家财硬升一层，无视大小境界，但有 {round(B.SAINT_PUNISH_PROB*100)}% 几率遭天谴跌落\n"
             "\n"
             "【💕 夫妻】\n"
-            f"24. /申请交配 —— 好感满 {B.MATING_AFFECTION_MIN} 后可申请，对方回复「同意」或「拒绝」\n"
+            f"25. /申请交配 —— 好感满 {B.MATING_AFFECTION_MIN} 后可申请，对方回复「同意」或「拒绝」\n"
             f"     每次成功 +{B.MATING_AFFECTION_GAIN} 好感（每周期 {B.MATING_LIMIT} 次）\n"
             "\n"
             "【🏆 榜单与查询】\n"
-            "25. /战力榜   26. /财富榜   27. /好感榜\n"
-            "28. /游戏机制 —— 查看当前全部数值与公式\n"
-            "29. /抽老婆帮助 —— 本页\n"
+            "26. /战力榜   27. /财富榜   28. /好感榜\n"
+            "29. /游戏机制 —— 查看当前全部数值与公式\n"
+            "30. /抽老婆帮助 —— 本页\n"
             "\n"
             "【🛠 管理员】\n"
-            "30. /重置 @某人 —— 只保留修为与金币，其余全部重置\n"
-            "31. /全服补偿 <金额> —— 给本群所有玩家发钱\n"
-            "32. /发钱 @某人 <金额> —— 定向加减金币（支持负数）\n"
+            "31. /重置 @某人 —— 只保留修为与金币，其余全部重置\n"
+            "32. /全服补偿 <金额> —— 给本群所有玩家发钱\n"
+            "33. /发钱 @某人 <金额> —— 定向加减金币（支持负数）\n"
             "=========================\n"
             f"🎯 基础成功率：强娶 {prob_force}% ｜ 抢夺 {prob_rob}%\n"
             f"⚔️ 底蕴战力 = 等级 × (大境界序号+1)；每 1 点战力差 = {rate_percent()} 胜率\n"
@@ -2327,6 +2328,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"• 修炼消耗：每周期限 {B.CULTIVATE_LIMIT} 次，每次消耗 (当前大境界序号 + 1) × {B.CULTIVATE_COST_BASE} 金币。\n"
             f"• 修炼突破：小境界成功率 {B.MINOR_SUCCESS_RATE:.0%}（失败无惩罚）；大境界成功率 {B.MAJOR_SUCCESS_RATE:.0%}，"
             f"失败后有 {B.MAJOR_FAIL_DROP_RATE:.0%} 概率走火入魔掉落 1 级。\n"
+            f"• 雷劫：元婴期每次大境界突破都会引来雷劫（触发概率 {B.TRIBULATION_PROB:.0%}），"
+            f"本次突破直接失败并跌落 {B.TRIBULATION_DROP_LEVELS} 层。\n"
+            f"• 成圣：/成圣 消耗 {B.SAINT_COST_BASE} + 等级×{B.SAINT_COST_PER_LEVEL} 金币，直接升一层（无视大小境界），"
+            f"但有 {B.SAINT_PUNISH_PROB:.0%} 概率遭天谴、跌落 {B.SAINT_PUNISH_DROP} 层；每 {B.SAINT_CYCLE_HOURS} 小时限 {B.SAINT_LIMIT} 次。\n"
             f"• 战斗掉级：进行【/抢老婆】失败时，若境界>0，有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率被反杀掉落 1 级。\n"
             "---\n"
             "💰【经济财富系统】\n"
@@ -2967,6 +2972,65 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._store.save()
         await self._send_avatar_msg(group_id, msg, sender_qq, target_qq)
         return True, "Suppress done", 2
+
+
+
+    # ---------------- 成圣 ----------------
+    @Command("saint", pattern=r"^\s*(?:/成圣|成圣|/贷款成圣|贷款成圣)$")
+    async def handle_saint(self, stream_id: str = "", **kwargs):
+        """散尽家财硬升一级：无视大小境界，但有几率遭天谴跌落。"""
+        if not self.config.plugin.enabled:
+            return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
+
+        group_id, sender_qq, _ = self._extract_ctx(kwargs)
+        if not group_id or not sender_qq:
+            return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "saint")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
+        user = self._get_user_data(group_id, sender_qq)
+        level = user["level"]
+
+        if is_max_level(level):
+            await self._send_avatar_msg(group_id, f"你已至【{realm_name(MAX_LEVEL)}】，成圣之路再无前方。", sender_qq, "")
+            return True, "Max level", 2
+
+        cost = int(B.SAINT_COST_BASE + level * B.SAINT_COST_PER_LEVEL)
+        if user["money"] < cost:
+            await self._send_avatar_msg(
+                group_id,
+                f"成圣需以重金叩问天道：你当前需 {cost} 金币，兜里只有 {user['money']}。",
+                sender_qq, "")
+            return True, "No money", 2
+
+        if not self._check_daily_limit(group_id, sender_qq, "saint", B.SAINT_LIMIT,
+                                       cycle_hours=B.SAINT_CYCLE_HOURS):
+            await self._send_avatar_msg(group_id, "本周期成圣的次数已用完，天道也要歇一歇。", sender_qq, "")
+            return True, "limit", 2
+
+        user["money"] -= cost
+        before = level
+
+        if random.random() < B.SAINT_PUNISH_PROB:
+            drop = min(before, max(0, int(B.SAINT_PUNISH_DROP)))
+            user["level"] = before - drop
+            msg = (f"⚡ 你以重金强叩天门，天道震怒——\n"
+                   f"雷光散去，修为跌落（【{realm_name(before)}】→【{realm_name(user['level'])}】），重金亦散尽。")
+        else:
+            user["level"] = min(MAX_LEVEL, before + 1)
+            msg = (f"💰 你散尽家财叩问天道，竟得一丝垂青——\n"
+                   f"修为更进一层（【{realm_name(before)}】→【{realm_name(user['level'])}】）。")
+
+        if self.config.partner_game.persist_enabled:
+            await self._store.save()
+
+        await self._send_avatar_msg(group_id, f"消耗 {cost} 金币。\n{msg}", sender_qq, "")
+        return True, "Saint done", 2
 
 
 def create_plugin():

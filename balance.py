@@ -178,6 +178,20 @@ MEMBER_CACHE_SECONDS = 60
 #: QQ 头像缓存秒数（0 = 不缓存）
 AVATAR_CACHE_SECONDS = 300
 
+# ============================================================ 贷 款 成 圣
+#: 成圣的基础费用（1 级时约等于这个数，等级越高越贵）
+SAINT_COST_BASE = 5000
+#: 每高一级额外加价
+SAINT_COST_PER_LEVEL = 2000
+#: 遭天谴的概率
+SAINT_PUNISH_PROB = 0.20
+#: 天谴时跌落的层数
+SAINT_PUNISH_DROP = 4
+#: 每周期可用次数
+SAINT_LIMIT = 1
+#: 成圣自己的周期时长（小时）
+SAINT_CYCLE_HOURS = 24
+
 # ============================================================ 贷款
 LOAN_REPAY_MULTIPLIER = 2.0   # 还款倍数：借 100 还 200
 LOAN_GRACE_MINUTES = 15       # 逾期时限（分钟），超时后限制活动
