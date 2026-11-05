@@ -542,10 +542,15 @@ class BalanceHeavenSection(_BalanceBase):
     rebirth_keep_ratio: float = Field(
         default=B.REBIRTH_KEEP_RATIO, ge=0, le=1,
         description=(
-            "重生（主动 /重生 或陨落时自动触发）后保留的修为比例。默认 0.7 = 保留 70% 等级。\n"
-            "其余一切（金币、伴侣、贷款、氪金加成、本周期次数与冷却）全部重置。"
+            "重生（主动 /重生 或陨落时自动触发）后保留的修为比例。\n"
+            "默认 0.0 = 完全重置，直接回到最初状态（修为归零）。\n"
+            "想留点底子就调高，例如 0.5 = 保留一半等级。"
         ),
-        json_schema_extra={"label": "重生保留修为比例", "placeholder": "默认 0.7", "order": 109, "step": 0.05})
+        json_schema_extra={"label": "重生保留修为比例", "placeholder": "默认 0（完全重置）", "order": 109, "step": 0.05})
+    rebirth_money: int = Field(
+        default=B.REBIRTH_MONEY, ge=0, le=100000000,
+        description="重生后发放的金币数额，即「最初状态」的启动资金。默认 1000。",
+        json_schema_extra={"label": "重生后金币", "placeholder": "默认 1000", "order": 110, "step": 100})
     fine_compensation_ratio: float = Field(
         default=B.FINE_COMPENSATION_RATIO, ge=0, le=1,
         description=("**失败罚款**里赔给对手的比例，0~1。默认 0.5（一半赔对方、一半蒸发）。\n"

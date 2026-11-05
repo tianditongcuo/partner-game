@@ -361,7 +361,7 @@ async def run(mod, pkg):
         (0.05, "打怪·金币", "金币增加"),
         (0.65, "打怪·提升", "+4 级"),
         (0.88, "打怪·跌落", "-4 级"),
-        (0.99, "打怪·陨落", "重生 70%"),
+        (0.99, "打怪·陨落", "重生归零"),
     ):
         reset()
         ctx("u1")
@@ -372,10 +372,10 @@ async def run(mod, pkg):
         u = users["u1"]
         results.append((label, "Lv=%s 金币=%s" % (u["level"], u["money"]), expect_desc))
         ok &= (r[1] == "Beast done")
-    # 陨落后应为 40 * 0.7 = 28 级、金币重置为初始值
-    ok &= (users["u1"]["level"] == 28 and users["u1"]["money"] == B.INITIAL_MONEY)
+    # 陨落后完全重置：修为归零、金币为重生启动资金
+    ok &= (users["u1"]["level"] == 0 and users["u1"]["money"] == B.REBIRTH_MONEY)
 
-    # ---- 主动重生：保留 70% 修为，其余重置 ----
+    # ---- 主动重生：完全重置，回到最初状态 ----
     reset()
     ctx("u1")
     store.data["marriages"][G] = {"u1": {"date": today, "wife_uid": "u2", "wife_nick": "u2",
@@ -384,11 +384,11 @@ async def run(mod, pkg):
                    "loan": {"principal": 100, "borrowed_at": 0}, "recharge": 0.4}
     r = await p.handle_rebirth(stream_id="", message={"processed_plain_text": "/重生"})
     u = users["u1"]
-    kept = (u["level"] == 35 and u["money"] == B.INITIAL_MONEY
+    kept = (u["level"] == 0 and u["money"] == B.REBIRTH_MONEY
             and "loan" not in u and "recharge" not in u
             and "u1" not in store.data["marriages"][G])
     ok &= bool(kept)
-    results.append(("主动重生", "Lv 50→%s 金币=%s" % (u["level"], u["money"]), "应 35 级 / 初始金币"))
+    results.append(("主动重生", "Lv 50→%s 金币=%s" % (u["level"], u["money"]), "应归零 / 重生金币"))
 
     # ---- 配置分组迁移：打劫/秘境的次数应在各自分组里 ----
     cfg = pkg.config

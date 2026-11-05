@@ -735,8 +735,15 @@ class PartnerGamePlugin(MaiBotPlugin):
                 "扣除现有金币的 %d%%（-%d，余额 %d）。" %
                 (count, int(B.TIAN_FA_MONEY_RATIO * 100), lost, user["money"]))
 
+    @staticmethod
+    def _rebirth_desc(before: int, after: int) -> str:
+        """重生的修为变化描述。归零与保留一半以下用不同措辞，都不写具体级数。"""
+        if after <= 0:
+            return f"修为尽数归零（【{realm_name(before)}】→【{realm_name(0)}】）"
+        return f"修为保留（【{realm_name(before)}】→【{realm_name(after)}】）"
+
     def _rebirth(self, group_id: str, qq: str, why: str = ""):
-        """重生：只保留 REBIRTH_KEEP_RATIO 比例的修为，其余全部重置。
+        """重生：按 REBIRTH_KEEP_RATIO 保留修为（默认 0 = 完全重置），其余全部重置。
 
         用于：主动 /重生、秘境陨落、打怪陨落。
         返回 (原等级, 重生后等级)，供文案使用。
@@ -746,7 +753,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         kept_level = int(before_level * B.REBIRTH_KEEP_RATIO)
 
         user["level"] = kept_level
-        user["money"] = B.INITIAL_MONEY
+        user["money"] = B.REBIRTH_MONEY
         user.pop("loan", None)
         user.pop("recharge", None)
         user.pop("last_allowance", None)
@@ -1789,7 +1796,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "20. /还贷 —— 一次性结清，不支持分期\n"
             f"21. /下秘境 —— 金币 / 修为暴涨 / 修为倒退 / 陨落（每周期 {B.REALM_DIVE_LIMIT} 次）\n"
             f"22. /打怪 —— 金币 / 修为提升 / 修为跌落 / 陨落（每周期 {B.BEAST_LIMIT} 次）\n"
-            f"23. /重生 —— 保留 {round(B.REBIRTH_KEEP_RATIO*100)}% 修为，其余全部重置（陨落时自动触发）\n"
+            f"23. /重生 —— 回到最初状态（修为按设定保留，默认归零），其余全部重置（陨落时自动触发）\n"
             f"24. /成圣 —— 散尽全部金币，按身家硬升修为（无视大小境界），最高可至【{realm_name(B.SAINT_MAX_LEVEL)}】，但有 {round(B.SAINT_PUNISH_PROB*100)}% 几率遭天谴跌落\n"
             "\n"
             "【💕 夫妻】\n"
@@ -2571,8 +2578,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         else:
             before, after = self._rebirth(group_id, sender_qq, "秘境陨落")
             msg = (f"秘境中天雷降下，你未能抵御、就此陨落……\n"
-                   f"只能保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为重入轮回："
-                   f"【{realm_name(before)}】→【{realm_name(after)}】，其余一切重置。")
+                   f"你重入轮回：{self._rebirth_desc(before, after)}，其余一切重置。")
 
         if self.config.partner_game.persist_enabled:
             await self._store.save()
@@ -2792,8 +2798,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         else:
             before, after = self._rebirth(group_id, sender_qq, "打怪陨落")
             msg = (f"你遇上了一头远古凶兽，力竭身陨……\n"
-                   f"只能保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为重入轮回："
-                   f"【{realm_name(before)}】→【{realm_name(after)}】，其余一切重置。")
+                   f"你重入轮回：{self._rebirth_desc(before, after)}，其余一切重置。")
 
         if self.config.partner_game.persist_enabled:
             await self._store.save()
@@ -2820,8 +2825,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         await self._send_avatar_msg(
             group_id,
             f"你散去一身因果，重入轮回。\n"
-            f"仅保留 {round(B.REBIRTH_KEEP_RATIO * 100)}% 的修为："
-            f"【{realm_name(before)}】→【{realm_name(after)}】；金币重置为 {B.INITIAL_MONEY}，"
+            f"{self._rebirth_desc(before, after)}；金币重置为 {B.REBIRTH_MONEY}，"
             f"伴侣、贷款、氪金加成与本周期次数全部清空。",
             sender_qq, "")
         return True, "Rebirth done", 2
