@@ -4,14 +4,14 @@
     "id": "tianditongcuo.partner-game-pro",
     "version": "2.0.2",
     "files": {
-      "plugin.py": 3073,
-      "config.py": 803,
+      "plugin.py": 3083,
+      "config.py": 810,
       "utils.py": 137,
       "__init__.py": 2
     },
-    "plugin_py_loc": 3073,
+    "plugin_py_loc": 3083,
     "commands": 36,
-    "config_fields": 136,
+    "config_fields": 137,
     "domains": {
       "router": {
         "name": "入口与路由",
@@ -1222,9 +1222,9 @@
       "lineno": 2994,
       "decorator_lineno": 2994,
       "code_lineno": 2995,
-      "end_lineno": 3069,
-      "loc": 75,
-      "awaits": 7,
+      "end_lineno": 3079,
+      "loc": 85,
+      "awaits": 8,
       "api_calls": [],
       "config_keys": [
         "persist_enabled"
@@ -2155,6 +2155,13 @@
       "name": "avatar_cache_seconds",
       "default": null,
       "label": "头像缓存（秒）",
+      "annotation": ""
+    },
+    {
+      "section": "BalanceSaintSection",
+      "name": "saint_max_level",
+      "default": null,
+      "label": "成圣最高等级",
       "annotation": ""
     },
     {

@@ -727,6 +727,25 @@ async def run(mod, pkg):
     ok &= (r[1] == "Max level")
     results.append(("成圣·满级", r[1], "99 级应拒绝"))
 
+    # ---- 成圣：受最高等级限制 ----
+    reset()
+    ctx("u1")
+    B.SAINT_MAX_LEVEL = 50
+    users["u1"] = {"money": 10 ** 10, "level": 10, "last_allowance": today}
+    with patch.object(random, "random", return_value=0.9):
+        await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (users["u1"]["level"] == 50)
+    results.append(("成圣·上限", "Lv 10→%s（上限 50）" % users["u1"]["level"], "再多钱也只能到 50"))
+
+    # ---- 成圣：已在上限时拒绝 ----
+    reset()
+    ctx("u1")
+    users["u1"] = {"money": 10 ** 9, "level": 50, "last_allowance": today}
+    r = await p.handle_saint(stream_id="", message={"processed_plain_text": "/成圣"})
+    ok &= (r[1] == "At cap" and users["u1"]["level"] == 50 and users["u1"]["money"] == 10 ** 9)
+    results.append(("成圣·已封顶", r[1], "到上限应拒绝且不扣钱"))
+    B.SAINT_MAX_LEVEL = 99                      # 还原默认，避免影响后续用例
+
     # ---- 天妒：同周期内只触发一次 ----
     reset()
     store.data["daily_usage"] = {}

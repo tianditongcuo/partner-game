@@ -747,6 +747,13 @@ class BalanceSaintSection(PluginConfigBase):
     __ui_label__: ClassVar[str] = "⑯ 贷款成圣"
     __ui_order__: ClassVar[int] = 17
 
+    saint_max_level: int = Field(
+        default=B.SAINT_MAX_LEVEL, ge=0, le=99,
+        description=(
+            "成圣最多能把修为推到第几层。默认 99（飞升圆满）。\n"
+            "填 50 就是「成圣止步于第 50 层」，之后只能靠 /修炼 继续。"
+        ),
+        json_schema_extra={"label": "成圣最高等级", "placeholder": "默认 99", "order": 169, "step": 1})
     saint_cost_base: int = Field(
         default=B.SAINT_COST_BASE, ge=0, le=100000000,
         description=(

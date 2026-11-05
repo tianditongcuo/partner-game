@@ -9,11 +9,11 @@
 | 插件 | 今日老婆 Pro+ (tianditongcuo.partner-game-pro) |
 | 版本 | 2.0.2 |
 | 指令数 | 36 |
-| plugin.py | 3073 行 |
-| config.py | 803 行 |
+| plugin.py | 3083 行 |
+| config.py | 810 行 |
 | utils.py | 137 行 |
 | __init__.py | 2 行 |
-| 配置项 | 136 |
+| 配置项 | 137 |
 | 持久化表 | marriages、users、daily_usage、last_date |
 | 测试 | 0 |
 
@@ -24,7 +24,7 @@
 | **入口与路由** | 指令注册、消息守卫、@目标解析、切片上下文 | 2 | 93 | `plugin.py:397-1873`；`plugin.py:44-114`；`plugin.py:116-146` |
 | **婚姻关系** | 抽取/求婚/强绑/抢夺/解绑/查询，marriages 表的唯一所有者 | 9 | 650 | `plugin.py:397-535`；`plugin.py:660-738`；`plugin.py:587-658` |
 | **经济财富** | 金币产出与消耗、罚款与赔偿、转账 | 7 | 327 | `plugin.py:322-333`；`plugin.py:1402-1429`；`plugin.py:1431-1478, 1480-1546` |
-| **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 3 | 223 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
+| **修仙成长** | 境界等级、修炼消耗与突破、战力换算 | 3 | 233 | `realms.py:29-34`；`plugin.py:1499-1500`；`plugin.py:1512-1540` |
 | **战斗结算** | 概率公式、战力压制、好感护盾、胜率预测 | 6 | 503 | `plugin.py:1030-1033`；`plugin.py:796-802`；`plugin.py:1015-1033` |
 | **惩罚与限次** | 冷却、每日次数、罚款、掉级 | — | 0 | `plugin.py:376-386`；`plugin.py:343-373`；`见各 handler` |
 | **展示与输出** | NapCat 直发、合并转发、头像、榜单、帮助文案 | 6 | 253 | `plugin.py:177-194`；`plugin.py:204-227`；`utils.py:16-36` |
@@ -175,7 +175,7 @@
 | `rebirth` |  | 入口与路由 | 2805 | 27 | 2 | — | persist_enabled | — |
 | `bully` |  | 战斗结算 | 2833 | 68 | 9 | daily_usage、users | persist_enabled | — |
 | `suppress` |  | 战斗结算 | 2902 | 92 | 9 | daily_usage、marriages、users | persist_enabled | — |
-| `saint` |  | 修仙成长 | 2995 | 75 | 7 | daily_usage、users | persist_enabled | — |
+| `saint` |  | 修仙成长 | 2995 | 85 | 8 | daily_usage、users | persist_enabled | — |
 
 ## 3. 数据模型
 
