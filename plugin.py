@@ -735,6 +735,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         user.pop("loan", None)
         user.pop("recharge", None)
         user.pop("last_allowance", None)
+        user.pop("banned_until", None)
+        user.pop("ban_reason", None)
 
         # 解除婚姻关系（自己作为老公 / 老婆两种位置都要摘掉）
         marriages = self._store.data.setdefault("marriages", {}).setdefault(group_id, {})
@@ -752,8 +754,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         for pid, proposal in list(self.pending_proposals.items()):
             if str(proposal.get("target_qq")) == qq or str(proposal.get("sender_qq")) == qq:
                 self.pending_proposals.pop(pid, None)
-        for key in [k for k in self.pending_mating if str(k[1]) == qq]:
-            self.pending_mating.pop(key, None)
+        for key, req in list(self.pending_mating.items()):
+            if str(key[1]) == qq or str(req.get("proposer")) == qq:
+                self.pending_mating.pop(key, None)
 
         self.ctx.logger.info("重生: %s（%s）%s → %s" % (qq, why, before_level, kept_level))
         return before_level, kept_level
@@ -1636,7 +1639,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         if sender_qq not in no_limit_users:
             if not self._check_daily_limit(group_id, sender_qq, "rob_money", B.ROB_MONEY_LIMIT,
                                cycle_hours=B.ROB_MONEY_CYCLE_HOURS):
-                await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
+                await self._send_avatar_msg(group_id, "你本周期打劫次数已用完，官府正在通缉你，下个周期再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
         recharge = self._take_recharge(sender_data)
@@ -2328,7 +2331,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "---\n"
             "💰【经济财富系统】\n"
             f"• 初始资金：{B.INITIAL_MONEY} 金币。每周期首次互动发放 {B.CYCLE_ALLOWANCE} 金币低保。\n"
-            f"• 打工收入：基础 {B.WORK_EARN_MIN}~{B.WORK_EARN_MAX} 金币 + (当前等级 × {B.WORK_LEVEL_BONUS}) 金币加成，"
+            f"• 打工收入：{B.WORK_EARN_MIN} ~ 等级×{B.WORK_EARN_MAX_PER_LEVEL} 金币（可为负 = 亏本），"
             f"每周期限 {B.WORK_LIMIT} 次。\n"
             f"• 约会消耗：每次 {B.DATE_COST} 金币，增加 {B.DATE_AFF_MIN}~{B.DATE_AFF_MAX} 点好感度，"
             f"每周期限 {B.DATE_LIMIT} 次。\n"
@@ -2341,9 +2344,8 @@ class PartnerGamePlugin(MaiBotPlugin):
             f"（{B.FINE_COMPENSATION_RATIO:.0%} 赔给防守方原配），并有 {B.ROB_WIFE_DROP_CHANCE:.0%} 概率掉级。\n"
             f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。"
             f"资金门槛 {B.ROB_MONEY_GATE}，成功抢走目标 {B.ROB_MONEY_RATIO_MIN:.0%}~{B.ROB_MONEY_RATIO_MAX:.0%} 资产"
-            f"（{B.ROB_MONEY_STEAL_MIN}~{B.ROB_MONEY_STEAL_CAP} 金币），每周期限 {B.ROB_MONEY_LIMIT} 次。"
+            f"（单次最低 {B.ROB_MONEY_STEAL_MIN} 金币；目标为负资产时最多 {B.ROB_MONEY_NEGATIVE_CAP} 金币），每周期限 {B.ROB_MONEY_LIMIT} 次。"
             f"失败罚款 {B.ROB_MONEY_FINE_MIN}~{B.ROB_MONEY_FINE_MAX} 金币（{B.FINE_COMPENSATION_RATIO:.0%} 赔给防守方）。"
-            f"资产低于 {B.ROB_MONEY_POOR_PROTECT} 的玩家受保护。\n"
             "• 犯罪概率浮动公式：\n"
             "  1. 战力压制：采用【底蕴战力=等级×(大境界数+1)】，(进攻方战力 - 防守方最高战力) × " + rate_percent() + "。\n"
             f"  2. 好感抵消（仅限抢老婆）：夫妻好感度每 {B.AFFECTION_PER_SHIELD} 点，"
@@ -2361,9 +2363,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         """向天道贷款：金额自定、不设上限，但必须按倍数一次性还清。"""
         if not self.config.plugin.enabled:
             return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "loan")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         amount = self._parse_amount(kwargs)
         if not amount or amount <= 0:
@@ -2399,6 +2408,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         """全额还贷：不分期，一次还清。"""
         if not self.config.plugin.enabled:
             return False, "Disabled", 0
+        if self._has_quote(kwargs):
+            return False, "Quote ignored", 0
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             return True, "Not in group", 2
@@ -2496,6 +2507,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         if not group_id or not sender_qq:
             return True, "Not in group", 2
 
+        blocked, why = self._guard(group_id, sender_qq, "realm_dive")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
+
         user = self._get_user_data(group_id, sender_qq)
         if not self._check_daily_limit(group_id, sender_qq, "realm_dive", B.REALM_DIVE_LIMIT,
                                cycle_hours=B.REALM_DIVE_CYCLE_HOURS):
@@ -2508,8 +2524,10 @@ class PartnerGamePlugin(MaiBotPlugin):
         p_fall = B.REALM_DIVE_FALL_PROB
         p_death = B.REALM_DIVE_DEATH_PROB
         total = p_gold + p_surge + p_fall + p_death
-        if total <= 0:                      # 配置写坏时兜底，避免 ZeroDivision
-            total = 1.0
+        if total <= 0:
+            # 所有结果概率都配置为 0 时，不应掉进“陨落”分支
+            await self._send_avatar_msg(group_id, "秘境中一片寂静，这次什么也没有发生。", sender_qq, "")
+            return True, "Dive empty", 2
         recharge = self._take_recharge(user)     # 氪金：把结果推向更好的分支
         roll = random.random() * total
         roll = max(0.0, roll - recharge)
@@ -2658,6 +2676,11 @@ class PartnerGamePlugin(MaiBotPlugin):
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
         if not group_id or not sender_qq:
             return True, "Not in group", 2
+
+        blocked, why = self._guard(group_id, sender_qq, "recharge")
+        if blocked:
+            await self._send_avatar_msg(group_id, why, sender_qq, "")
+            return True, "blocked", 2
 
         amount = self._parse_amount(kwargs)
         if not amount or amount < B.RECHARGE_MIN_AMOUNT:
